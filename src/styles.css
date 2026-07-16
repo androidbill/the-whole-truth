@@ -807,6 +807,182 @@ body {
   margin-bottom: 6px;
 }
 
+/* ---------- Kebab menu ---------- */
+.kebab-wrap {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  right: 14px;
+  z-index: 30;
+}
+.kebab {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 900;
+  width: 42px;
+  height: 42px;
+  cursor: pointer;
+  line-height: 1;
+}
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.menu-pop {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  z-index: 31;
+  background: #241245;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  min-width: 160px;
+  animation: chip-pop 0.15s ease both;
+}
+.menu-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  padding: 13px 18px;
+  cursor: pointer;
+}
+.menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.menu-item + .menu-item {
+  border-top: 1px solid var(--card-border);
+}
+
+/* ---------- About modal ---------- */
+.about-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(10, 4, 20, 0.75);
+  display: grid;
+  place-items: center;
+  animation: screen-in 0.2s ease both;
+}
+.about-card {
+  background: #241245;
+  border: 1px solid var(--card-border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  padding: 28px 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  max-width: 320px;
+}
+.about-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+  margin-bottom: 8px;
+  box-shadow: 0 10px 30px rgba(192, 38, 211, 0.4);
+}
+.about-name {
+  font-size: 22px;
+  font-weight: 900;
+}
+.about-by {
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+.about-version {
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin-bottom: 12px;
+}
+
+/* ---------- Install banner ---------- */
+.install-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 340px;
+  margin-top: 18px;
+  background: var(--card);
+  border: 1px solid rgba(244, 114, 182, 0.4);
+  border-radius: 16px;
+  color: var(--ink);
+  font-family: inherit;
+  padding: 10px 14px;
+  cursor: pointer;
+  text-align: left;
+  animation: chip-pop 0.3s ease both;
+}
+.install-banner img {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+}
+.install-banner span {
+  display: flex;
+  flex-direction: column;
+}
+.install-banner b {
+  font-size: 15px;
+}
+.install-banner small {
+  color: var(--ink-dim);
+  font-size: 12px;
+}
+.install-banner .install-cta {
+  margin-left: auto;
+  background: var(--grad);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+/* ---------- Update banner ---------- */
+.update-banner {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #2b1650;
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 9px 10px 9px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  animation: toast-in 0.3s ease both;
+  max-width: 92vw;
+}
+.update-banner button {
+  background: var(--gold);
+  border: none;
+  border-radius: 999px;
+  color: #3b2b00;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed;

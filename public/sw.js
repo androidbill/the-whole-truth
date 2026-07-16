@@ -1,7 +1,7 @@
 // The Whole Truth — service worker
 // Network-first for navigations, cache-first for static assets.
 // BASE-aware so it works at a subpath (e.g. GitHub Pages) or at the root.
-const VERSION = '2026.07.15.02'
+const VERSION = '2026.07.15.03'
 const CACHE = 'twt-' + VERSION
 const BASE = new URL('./', self.location).pathname
 const INDEX = BASE + 'index.html'
@@ -23,6 +23,8 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url)
   if (e.request.method !== 'GET' || url.origin !== location.origin) return
+  // version.json must always hit the network — it drives the update prompt
+  if (url.pathname.endsWith('/version.json')) return
 
   if (e.request.mode === 'navigate') {
     e.respondWith(

@@ -8,7 +8,8 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.15.02'
+export const APP_VERSION = '2026.07.15.03'
+export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
 // Identity & small utils
@@ -56,6 +57,87 @@ const EMOJIS = [
 ]
 
 const DELETE = '__DELETE__'
+
+// ------------------------------------------------------------
+// PWA: install prompt + update detection + hard refresh
+// ------------------------------------------------------------
+let deferredInstall = null
+const installSubs = new Set()
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  deferredInstall = e
+  installSubs.forEach((f) => f(true))
+})
+window.addEventListener('appinstalled', () => {
+  deferredInstall = null
+  installSubs.forEach((f) => f(false))
+})
+
+function useCanInstall() {
+  const [can, setCan] = useState(!!deferredInstall)
+  useEffect(() => {
+    installSubs.add(setCan)
+    return () => installSubs.delete(setCan)
+  }, [])
+  return can
+}
+
+async function promptInstall() {
+  const ev = deferredInstall
+  if (!ev) return
+  deferredInstall = null
+  installSubs.forEach((f) => f(false))
+  ev.prompt()
+  try {
+    await ev.userChoice
+  } catch {}
+}
+
+// Nuke caches + service worker, then reload — a genuinely fresh copy.
+async function hardRefresh() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(regs.map((r) => r.unregister()))
+    }
+    if (window.caches) {
+      const keys = await caches.keys()
+      await Promise.all(keys.map((k) => caches.delete(k)))
+    }
+  } catch {}
+  location.reload()
+}
+
+// Polls version.json (emitted at build time from APP_VERSION); returns the
+// newer version string when the server has one, else null.
+function useUpdateCheck() {
+  const [fresh, setFresh] = useState(null)
+  useEffect(() => {
+    let stopped = false
+    const check = async () => {
+      try {
+        const res = await fetch(import.meta.env.BASE_URL + 'version.json?t=' + Date.now(), {
+          cache: 'no-store',
+        })
+        if (!res.ok) return
+        const { version } = await res.json()
+        if (!stopped && version && version > APP_VERSION) setFresh(version)
+      } catch {}
+    }
+    check()
+    const iv = setInterval(check, 10 * 60 * 1000)
+    const vis = () => {
+      if (document.visibilityState === 'visible') check()
+    }
+    document.addEventListener('visibilitychange', vis)
+    return () => {
+      stopped = true
+      clearInterval(iv)
+      document.removeEventListener('visibilitychange', vis)
+    }
+  }, [])
+  return fresh
+}
 
 // ------------------------------------------------------------
 // Toast pubsub
@@ -347,10 +429,63 @@ function RoundHeader({ room }) {
 // ------------------------------------------------------------
 // Screens
 // ------------------------------------------------------------
+function AboutModal({ onClose }) {
+  return (
+    <div className="about-overlay" onClick={onClose}>
+      <div className="about-card" onClick={(e) => e.stopPropagation()}>
+        <img
+          className="about-icon"
+          src={import.meta.env.BASE_URL + 'icons/icon-192.png'}
+          alt="The Whole Truth icon"
+        />
+        <div className="about-name">The Whole Truth</div>
+        <div className="about-by">Created by {APP_AUTHOR}</div>
+        <div className="about-version">Version {APP_VERSION}</div>
+        <button className="btn btn-ghost" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function HomeScreen({ onCreate, onJoin }) {
+  const [menu, setMenu] = useState(false)
+  const [about, setAbout] = useState(false)
+  const canInstall = useCanInstall()
   return (
     <div className="screen screen-home">
       <div className="home-glow" />
+      <div className="kebab-wrap">
+        <button className="kebab" aria-label="Menu" onClick={() => setMenu((m) => !m)}>
+          ⋮
+        </button>
+        {menu && (
+          <>
+            <div className="menu-backdrop" onClick={() => setMenu(false)} />
+            <div className="menu-pop">
+              <button
+                className="menu-item"
+                onClick={() => {
+                  setMenu(false)
+                  hardRefresh()
+                }}
+              >
+                🔄 Refresh
+              </button>
+              <button
+                className="menu-item"
+                onClick={() => {
+                  setMenu(false)
+                  setAbout(true)
+                }}
+              >
+                ℹ️ About
+              </button>
+            </div>
+          </>
+        )}
+      </div>
       <Logo />
       <p className="tagline">
         The party game where everyone <em>lies</em> about each other —
@@ -371,7 +506,18 @@ function HomeScreen({ onCreate, onJoin }) {
           Connect Firebase to play across phones.
         </div>
       )}
+      {canInstall && (
+        <button className="install-banner" onClick={promptInstall}>
+          <img src={import.meta.env.BASE_URL + 'icons/icon-192.png'} alt="" />
+          <span>
+            <b>Install The Whole Truth</b>
+            <small>Free · full screen · works like a real app</small>
+          </span>
+          <span className="install-cta">Install</span>
+        </button>
+      )}
       <div className="version">v{APP_VERSION}</div>
+      {about && <AboutModal onClose={() => setAbout(false)} />}
     </div>
   )
 }
@@ -1006,8 +1152,16 @@ function App() {
     screen = <HomeScreen onCreate={() => setView('create')} onJoin={() => setView('join')} />
   }
 
+  const freshVersion = useUpdateCheck()
+
   return (
     <div className="app">
+      {freshVersion && (
+        <div className="update-banner">
+          <span>✨ New version ready (v{freshVersion})</span>
+          <button onClick={hardRefresh}>Refresh</button>
+        </div>
+      )}
       {screen}
       {toast && <div className="toast">{toast}</div>}
     </div>
