@@ -30,18 +30,26 @@ npm run icons      # regenerate PWA icons (pure Node, no deps)
 npm run build      # production build to dist/
 ```
 
-## Firebase setup (one time)
+## Hosting
 
-1. `npx firebase-tools login`
-2. Create a project + web app, then copy the config into `.env.local`
-   (see `.env.example` for the variable names).
-3. Deploy rules and hosting:
-   ```
-   npx firebase-tools deploy --project <project-id>
-   ```
+The app deploys to **GitHub Pages** automatically on every push to `main`
+(`.github/workflows/deploy.yml`): https://androidbill.github.io/the-whole-truth/
 
-Firestore holds one document per party in `rooms/{CODE}`. The trust model is
-"anyone with the room code can play" — no accounts. Rooms are throwaway state.
+The build uses a relative Vite base (`./`) and a base-aware service worker, so
+the same `dist/` also works at a domain root (e.g. Firebase Hosting) unchanged.
+
+## Backend (Firestore)
+
+The multiplayer backend is Cloud Firestore on project `the-whole-truth-b7k4` —
+one document per party in `rooms/{CODE}`. The trust model is "anyone with the
+room code can play" — no accounts, throwaway state. The web config is baked
+into `src/main.jsx` (it is public by design; `firestore.rules` is the security
+boundary). To point a fork at your own Firebase project, set the `VITE_FB_*`
+variables (see `.env.example`) or edit the fallbacks in `main.jsx`, then:
+
+```
+npx firebase-tools deploy --only firestore --project <project-id>
+```
 
 ## Conventions
 

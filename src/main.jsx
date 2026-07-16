@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.15.01'
+export const APP_VERSION = '2026.07.15.02'
 
 // ------------------------------------------------------------
 // Identity & small utils
@@ -71,11 +71,14 @@ function notify(msg) {
 //   watch(code, cb) -> unsubscribe
 // Patches use Firestore-style dotted paths. Value DELETE removes a field.
 // ------------------------------------------------------------
+// Firebase web config is public by design (it ships in the built JS either
+// way; Firestore rules are the security boundary). Env vars can override it,
+// e.g. to point a fork at its own project.
 const FB = {
-  apiKey: import.meta.env.VITE_FB_API_KEY,
-  authDomain: import.meta.env.VITE_FB_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FB_PROJECT_ID,
-  appId: import.meta.env.VITE_FB_APP_ID,
+  apiKey: import.meta.env.VITE_FB_API_KEY || 'AIzaSyCutcilkoXvIVEKYH5xfRUbs3tzwNja18U',
+  authDomain: import.meta.env.VITE_FB_AUTH_DOMAIN || 'the-whole-truth-b7k4.firebaseapp.com',
+  projectId: import.meta.env.VITE_FB_PROJECT_ID || 'the-whole-truth-b7k4',
+  appId: import.meta.env.VITE_FB_APP_ID || '1:924562869097:web:55d689399e8f5e8a954bf8',
 }
 const FORCE_LOCAL = new URLSearchParams(location.search).has('local')
 export const ONLINE_MODE = !!(FB.apiKey && FB.projectId) && !FORCE_LOCAL
@@ -1030,7 +1033,7 @@ function buildScorePatch(room) {
 // ------------------------------------------------------------
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
+    navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js').catch(() => {})
   })
 }
 
