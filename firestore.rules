@@ -1,0 +1,20 @@
+rules_version = '2';
+
+// The Whole Truth — party-game trust model.
+// Rooms are addressed by unguessable-enough 4-letter codes and hold
+// throwaway game state. No accounts; anyone with the code can play.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /rooms/{code} {
+      allow get: if code.matches('^[A-Z]{4}$');
+      allow list: if false;
+      allow create: if code.matches('^[A-Z]{4}$')
+        && request.resource.data.code == code
+        && request.resource.data.phase == 'lobby'
+        && request.resource.data.players is map
+        && request.resource.data.players.size() == 1;
+      allow update: if code.matches('^[A-Z]{4}$');
+      allow delete: if false;
+    }
+  }
+}
