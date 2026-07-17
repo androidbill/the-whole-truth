@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.09'
+export const APP_VERSION = '2026.07.17.10'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
