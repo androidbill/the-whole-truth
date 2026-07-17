@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.01'
+export const APP_VERSION = '2026.07.17.02'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -91,6 +91,25 @@ async function promptInstall() {
   try {
     await ev.userChoice
   } catch {}
+}
+
+// Native share sheet where available; otherwise copy the link.
+async function shareApp() {
+  const url = location.origin + import.meta.env.BASE_URL
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: 'The Whole Truth',
+        text: 'The party game where everyone lies about each other — come play!',
+        url,
+      })
+    } else {
+      await navigator.clipboard.writeText(url)
+      notify('Link copied to clipboard!')
+    }
+  } catch {
+    // user closed the share sheet — not an error
+  }
 }
 
 // Nuke caches + service worker, then reload — a genuinely fresh copy.
@@ -487,6 +506,15 @@ function HomeScreen({ onCreate, onJoin }) {
                 }}
               >
                 🔄 Refresh
+              </button>
+              <button
+                className="menu-item"
+                onClick={() => {
+                  setMenu(false)
+                  shareApp()
+                }}
+              >
+                📤 Share
               </button>
               <button
                 className="menu-item"
