@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.05'
+export const APP_VERSION = '2026.07.17.06'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -335,10 +335,22 @@ function subjectOf(room) {
   const sid = room.order[room.qIndex % room.order.length]
   return { id: sid, ...(room.players[sid] || { name: '???', emoji: '❓' }) }
 }
+const PRONOUNS = {
+  m: { they: 'he', them: 'him', their: 'his', theirs: 'his', themselves: 'himself' },
+  f: { they: 'she', them: 'her', their: 'her', theirs: 'hers', themselves: 'herself' },
+}
 function questionText(room) {
   const subj = subjectOf(room)
   const raw = room?.questions?.[room.qIndex] || ''
-  return raw.replaceAll('{P}', subj ? subj.name : '???')
+  // Questions use the first name; pronouns follow the chosen sex.
+  // (they/them fallback for players from before profiles had these fields)
+  const first = subj?.first || subj?.name || '???'
+  const p = PRONOUNS[subj?.gender] || {
+    they: 'they', them: 'them', their: 'their', theirs: 'theirs', themselves: 'themselves',
+  }
+  let out = raw.replaceAll('{P}', first)
+  for (const [token, word] of Object.entries(p)) out = out.replaceAll('{' + token + '}', word)
+  return out
 }
 function tally(room) {
   const counts = {}
@@ -615,18 +627,30 @@ function HomeScreen({ onCreate, onJoin }) {
   )
 }
 
+function playerFromProfile(profile) {
+  return {
+    name: profile.name.trim(),
+    first: profile.first.trim(),
+    last: profile.last.trim(),
+    gender: profile.gender,
+    emoji: profile.emoji,
+    score: 0,
+    joinedAt: Date.now(),
+  }
+}
+
+function profileError(profile) {
+  if (!profile.name.trim()) return 'Pick a nickname first!'
+  if (!profile.first?.trim()) return "What's your first name?"
+  if (!profile.last?.trim()) return "What's your last name?"
+  if (!profile.gender) return 'Choose male or female.'
+  return null
+}
+
 function ProfileForm({ profile, setProfile }) {
   return (
     <>
-      <label className="field-label">Your name</label>
-      <input
-        className="input"
-        maxLength={16}
-        placeholder="e.g. Bill"
-        value={profile.name}
-        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-      />
-      <label className="field-label">Pick your face</label>
+      <label className="field-label">Choose your avatar</label>
       <div className="emoji-grid">
         {EMOJIS.map((e) => (
           <button
@@ -638,6 +662,45 @@ function ProfileForm({ profile, setProfile }) {
           </button>
         ))}
       </div>
+      <label className="field-label">Nickname</label>
+      <input
+        className="input"
+        maxLength={16}
+        placeholder="e.g. Big Bill"
+        value={profile.name}
+        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+      />
+      <label className="field-label">First name</label>
+      <input
+        className="input"
+        maxLength={20}
+        placeholder="e.g. Bill"
+        value={profile.first || ''}
+        onChange={(e) => setProfile({ ...profile, first: e.target.value })}
+      />
+      <label className="field-label">Last name</label>
+      <input
+        className="input"
+        maxLength={20}
+        placeholder="e.g. Parsons"
+        value={profile.last || ''}
+        onChange={(e) => setProfile({ ...profile, last: e.target.value })}
+      />
+      <label className="field-label">I am</label>
+      <div className="seg">
+        <button
+          className={'seg-btn' + (profile.gender === 'm' ? ' seg-sel' : '')}
+          onClick={() => setProfile({ ...profile, gender: 'm' })}
+        >
+          👨 Male
+        </button>
+        <button
+          className={'seg-btn' + (profile.gender === 'f' ? ' seg-sel' : '')}
+          onClick={() => setProfile({ ...profile, gender: 'f' })}
+        >
+          👩 Female
+        </button>
+      </div>
     </>
   )
 }
@@ -648,8 +711,8 @@ function CreateScreen({ profile, setProfile, onBack, onCreated }) {
   const [busy, setBusy] = useState(false)
 
   const create = async () => {
-    const name = profile.name.trim()
-    if (!name) return notify('Give yourself a name first!')
+    const err = profileError(profile)
+    if (err) return notify(err)
     setBusy(true)
     try {
       const store = await getStore()
@@ -666,7 +729,7 @@ function CreateScreen({ profile, setProfile, onBack, onCreated }) {
         deck,
         cycles,
         phase: 'lobby',
-        players: { [id]: { name, emoji: profile.emoji, score: 0, joinedAt: Date.now() } },
+        players: { [id]: playerFromProfile(profile) },
         order: [],
         questions: [],
         qIndex: 0,
@@ -721,10 +784,10 @@ function JoinScreen({ profile, setProfile, onBack, onJoined, prefillCode }) {
   const [busy, setBusy] = useState(false)
 
   const join = async () => {
-    const name = profile.name.trim()
     const c = code.trim().toUpperCase()
     if (c.length !== 4) return notify('Party codes are 4 letters.')
-    if (!name) return notify('Give yourself a name first!')
+    const err = profileError(profile)
+    if (err) return notify(err)
     setBusy(true)
     try {
       const store = await getStore()
@@ -745,7 +808,7 @@ function JoinScreen({ profile, setProfile, onBack, onJoined, prefillCode }) {
           return
         }
         await store.update(c, {
-          ['players.' + id]: { name, emoji: profile.emoji, score: 0, joinedAt: Date.now() },
+          ['players.' + id]: playerFromProfile(profile),
         })
       }
       onJoined(c)
@@ -1081,12 +1144,11 @@ function App() {
   })
   const [room, setRoom] = useState(null)
   const [profile, setProfileState] = useState(() => {
+    const defaults = { name: '', first: '', last: '', gender: '', emoji: EMOJIS[0] }
     try {
-      return (
-        JSON.parse(localStorage.getItem(LS_PROFILE)) || { name: '', emoji: EMOJIS[0] }
-      )
+      return { ...defaults, ...(JSON.parse(localStorage.getItem(LS_PROFILE)) || {}) }
     } catch {
-      return { name: '', emoji: EMOJIS[0] }
+      return defaults
     }
   })
   const [toast, setToast] = useState(null)
