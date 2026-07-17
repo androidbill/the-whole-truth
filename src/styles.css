@@ -813,6 +813,12 @@ body {
   top: max(14px, env(safe-area-inset-top));
   right: 14px;
   z-index: 30;
+  display: flex;
+  gap: 8px;
+}
+.kebab svg {
+  display: block;
+  margin: auto;
 }
 .kebab {
   background: var(--card);
@@ -905,6 +911,22 @@ body {
 .about-version {
   font-size: 13px;
   color: var(--ink-dim);
+  margin-bottom: 12px;
+}
+
+/* ---------- QR modal ---------- */
+.qr-card {
+  background: #fff;
+  color: #1e0f38;
+}
+.qr-canvas {
+  border-radius: 12px;
+  max-width: 100%;
+}
+.qr-url {
+  font-size: 13px;
+  color: #6b5f80;
+  word-break: break-all;
   margin-bottom: 12px;
 }
 

@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.02'
+export const APP_VERSION = '2026.07.17.03'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -93,9 +93,15 @@ async function promptInstall() {
   } catch {}
 }
 
+// Canonical app link. BASE_URL is './' (relative base), so resolve against
+// the current page rather than concatenating to the origin.
+function appUrl() {
+  return new URL('.', location.href).href
+}
+
 // Native share sheet where available; otherwise copy the link.
 async function shareApp() {
-  const url = location.origin + import.meta.env.BASE_URL
+  const url = appUrl()
   try {
     if (navigator.share) {
       await navigator.share({
@@ -483,14 +489,57 @@ function AboutModal({ onClose }) {
   )
 }
 
+function QrModal({ onClose }) {
+  const canvasRef = useRef(null)
+  const url = appUrl()
+  useEffect(() => {
+    let cancelled = false
+    import('qrcode').then(({ default: QRCode }) => {
+      if (cancelled || !canvasRef.current) return
+      QRCode.toCanvas(canvasRef.current, url, {
+        width: 240,
+        margin: 2,
+        color: { dark: '#150a26', light: '#ffffff' },
+      }).catch(() => {})
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [url])
+  return (
+    <div className="about-overlay" onClick={onClose}>
+      <div className="about-card qr-card" onClick={(e) => e.stopPropagation()}>
+        <div className="about-name">Scan to open the app</div>
+        <canvas ref={canvasRef} className="qr-canvas" />
+        <div className="qr-url">{url}</div>
+        <button className="btn btn-primary" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function QrIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm13-2h3v3h-3v-3zm-5 0h3v3h-3v-3zm0 5h3v3h-3v-3zm5 0h3v3h-3v-3z" />
+    </svg>
+  )
+}
+
 function HomeScreen({ onCreate, onJoin }) {
   const [menu, setMenu] = useState(false)
   const [about, setAbout] = useState(false)
+  const [qr, setQr] = useState(false)
   const canInstall = useCanInstall()
   return (
     <div className="screen screen-home">
       <div className="home-glow" />
       <div className="kebab-wrap">
+        <button className="kebab" aria-label="Show QR code" onClick={() => setQr(true)}>
+          <QrIcon />
+        </button>
         <button className="kebab" aria-label="Menu" onClick={() => setMenu((m) => !m)}>
           ⋮
         </button>
@@ -561,6 +610,7 @@ function HomeScreen({ onCreate, onJoin }) {
       )}
       <div className="version">v{APP_VERSION}</div>
       {about && <AboutModal onClose={() => setAbout(false)} />}
+      {qr && <QrModal onClose={() => setQr(false)} />}
     </div>
   )
 }
