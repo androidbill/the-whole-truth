@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.12'
+export const APP_VERSION = '2026.07.17.13'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -17,6 +17,8 @@ export const APP_AUTHOR = 'Bill Parsons'
 const LS_ID = 'twt-player-id'
 const LS_PROFILE = 'twt-profile'
 const LS_SESSION = 'twt-session'
+const LS_HISTORY = 'twt-history'
+const LS_HISTORY_LAST = 'twt-history-last'
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
@@ -361,6 +363,36 @@ function tally(room) {
 }
 
 // ------------------------------------------------------------
+// Game history (kept per device in localStorage)
+// ------------------------------------------------------------
+function loadHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_HISTORY)) || []
+  } catch {
+    return []
+  }
+}
+
+// Called whenever we see the final screen; the fingerprint keeps the same
+// game from being recorded twice (including across reloads).
+function saveGameToHistory(room) {
+  try {
+    const players = ranked(room).map((p) => ({
+      name: p.name,
+      emoji: p.emoji,
+      votes: Math.round((p.score || 0) / 100),
+    }))
+    const key =
+      room.code + ':' + (room.createdAt || 0) + ':' + players.map((p) => p.name + p.votes).join(',')
+    if (localStorage.getItem(LS_HISTORY_LAST) === key) return
+    localStorage.setItem(LS_HISTORY_LAST, key)
+    const list = loadHistory()
+    list.unshift({ at: Date.now(), code: room.code, deck: room.deck, players })
+    localStorage.setItem(LS_HISTORY, JSON.stringify(list.slice(0, 50)))
+  } catch {}
+}
+
+// ------------------------------------------------------------
 // Confetti (final screen)
 // ------------------------------------------------------------
 function Confetti() {
@@ -501,6 +533,52 @@ function AboutModal({ onClose }) {
   )
 }
 
+function HistoryModal({ onClose }) {
+  const games = loadHistory()
+  return (
+    <div className="about-overlay" onClick={onClose}>
+      <div className="about-card history-card" onClick={(e) => e.stopPropagation()}>
+        <div className="about-name">📜 Game History</div>
+        {games.length === 0 ? (
+          <div className="history-empty">No games on this device yet — go play one!</div>
+        ) : (
+          <div className="history-list">
+            {games.map((g, i) => {
+              const deck = DECKS.find((d) => d.id === g.deck)
+              return (
+                <div key={i} className="history-item">
+                  <div className="history-top">
+                    <span className="history-date">
+                      {new Date(g.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                    </span>
+                    <span className="history-deck">{deck ? deck.emoji + ' ' + deck.name : ''}</span>
+                  </div>
+                  <div className="history-winner">
+                    👑 {g.players[0]?.emoji} {g.players[0]?.name} won
+                  </div>
+                  {g.players.map((p, j) => (
+                    <div key={j} className="history-player">
+                      <span>
+                        {p.emoji} {p.name}
+                      </span>
+                      <span className="history-votes">
+                        {p.votes} vote{p.votes === 1 ? '' : 's'} won
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <button className="btn btn-ghost" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function QrModal({ onClose }) {
   const canvasRef = useRef(null)
   const url = appUrl()
@@ -544,6 +622,7 @@ function HomeScreen({ onCreate, onJoin }) {
   const [menu, setMenu] = useState(false)
   const [about, setAbout] = useState(false)
   const [qr, setQr] = useState(false)
+  const [history, setHistory] = useState(false)
   const canInstall = useCanInstall()
   return (
     <div className="screen screen-home">
@@ -576,6 +655,15 @@ function HomeScreen({ onCreate, onJoin }) {
                 }}
               >
                 📤 Share
+              </button>
+              <button
+                className="menu-item"
+                onClick={() => {
+                  setMenu(false)
+                  setHistory(true)
+                }}
+              >
+                📜 History
               </button>
               <button
                 className="menu-item"
@@ -623,6 +711,7 @@ function HomeScreen({ onCreate, onJoin }) {
       <div className="version">v{APP_VERSION}</div>
       {about && <AboutModal onClose={() => setAbout(false)} />}
       {qr && <QrModal onClose={() => setQr(false)} />}
+      {history && <HistoryModal onClose={() => setHistory(false)} />}
     </div>
   )
 }
@@ -767,7 +856,7 @@ function CreateScreen({ profile, setProfile, onBack, onCreated }) {
         questions: [],
         qIndex: 0,
         totalQ: 0,
-        current: { answers: {}, votes: {}, revealOrder: [] },
+        current: { answers: {}, votes: {}, revealOrder: [], reactions: {} },
       })
       onCreated(code)
     } catch (err) {
@@ -890,7 +979,7 @@ function LobbyScreen({ room, me, isHost, act, onLeave }) {
       questions: pool.slice(0, totalQ),
       qIndex: 0,
       totalQ,
-      current: { answers: {}, votes: {}, revealOrder: [] },
+      current: { answers: {}, votes: {}, revealOrder: [], reactions: {} },
     }
     for (const p of players) patch['players.' + p.id + '.score'] = 0
     act(patch)
@@ -1040,12 +1129,64 @@ function VoteScreen({ room, me, isHost, act }) {
   )
 }
 
+const REACTION_EMOJIS = [
+  '😂', '🤣', '😅', '😍', '🥰', '😏', '😉', '😳',
+  '😱', '🤯', '🥵', '😈', '🤢', '🙄', '💀', '🤔',
+]
+
+function SmileyOutline() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 14.5c.9 1.2 2.1 1.8 3.5 1.8s2.6-.6 3.5-1.8" />
+      <circle cx="9" cy="10" r="0.6" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="10" r="0.6" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
+function ReactionBar({ pid, reactions, open, onToggle, onReact }) {
+  const mine = reactions?.[pid] || {}
+  const grouped = {}
+  for (const e of Object.values(mine)) grouped[e] = (grouped[e] || 0) + 1
+  return (
+    <div className="reaction-wrap">
+      <div className="reaction-row">
+        {Object.entries(grouped).map(([e, n]) => (
+          <span key={e} className="reaction-chip">
+            {e}
+            {n > 1 && <small>{n}</small>}
+          </span>
+        ))}
+        <button className="react-btn" aria-label="React to this answer" onClick={onToggle}>
+          <SmileyOutline />
+        </button>
+      </div>
+      {open && (
+        <div className="react-picker">
+          {REACTION_EMOJIS.map((e) => (
+            <button key={e} className="react-pick" onClick={() => onReact(e)}>
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function RevealScreen({ room, me, isHost, act }) {
   const answers = room.current?.answers || {}
   const votes = room.current?.votes || {}
+  const reactions = room.current?.reactions || {}
+  const [pickerFor, setPickerFor] = useState(null)
   const counts = tally(room)
   const subj = subjectOf(room)
   const players = room.players
+  const react = (pid, emoji) => {
+    act({ ['current.reactions.' + pid + '.' + me.id]: emoji })
+    setPickerFor(null)
+  }
   const rows = (room.current?.revealOrder || [])
     .map((pid) => ({
       pid,
@@ -1063,7 +1204,7 @@ function RevealScreen({ room, me, isHost, act }) {
       act({
         phase: 'write',
         qIndex: room.qIndex + 1,
-        current: { answers: {}, votes: {}, revealOrder: [] },
+        current: { answers: {}, votes: {}, revealOrder: [], reactions: {} },
       })
     }
   }
@@ -1085,6 +1226,13 @@ function RevealScreen({ room, me, isHost, act }) {
                 {r.voters.join(' ')} {r.votes > 0 ? `+${r.votes * 100}` : '·'}
               </span>
             </div>
+            <ReactionBar
+              pid={r.pid}
+              reactions={reactions}
+              open={pickerFor === r.pid}
+              onToggle={() => setPickerFor(pickerFor === r.pid ? null : r.pid)}
+              onReact={(e) => react(r.pid, e)}
+            />
           </div>
         ))}
       </div>
@@ -1111,7 +1259,7 @@ function FinalScreen({ room, me, isHost, act, onLeave }) {
       totalQ: 0,
       order: [],
       questions: [],
-      current: { answers: {}, votes: {}, revealOrder: [] },
+      current: { answers: {}, votes: {}, revealOrder: [], reactions: {} },
     }
     for (const p of rows) patch['players.' + p.id + '.score'] = 0
     act(patch)
@@ -1295,6 +1443,11 @@ function App() {
       }
     }
   }, [room, id, session?.code, act])
+
+  // Record finished games in this device's history
+  useEffect(() => {
+    if (room?.phase === 'final') saveGameToHistory(room)
+  }, [room])
 
   // If the room vanished or ended underneath us
   useEffect(() => {

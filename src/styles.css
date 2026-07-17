@@ -938,6 +938,125 @@ body {
   margin-bottom: 12px;
 }
 
+/* ---------- History modal ---------- */
+.history-card {
+  max-width: 360px;
+  width: calc(100vw - 40px);
+}
+.history-empty {
+  color: var(--ink-dim);
+  font-size: 15px;
+  padding: 16px 0;
+}
+.history-list {
+  width: 100%;
+  max-height: 55vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 12px;
+}
+.history-item {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  text-align: left;
+}
+.history-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ink-dim);
+  margin-bottom: 6px;
+}
+.history-winner {
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+.history-player {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  padding: 2px 0;
+}
+.history-votes {
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+/* ---------- Answer reactions ---------- */
+.reaction-wrap {
+  margin-top: 8px;
+}
+.reaction-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.reaction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 16px;
+  animation: chip-pop 0.25s ease both;
+}
+.reaction-chip small {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ink-dim);
+}
+.react-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  color: var(--ink-dim);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.1s, color 0.15s, border-color 0.15s;
+}
+.react-btn:hover {
+  color: var(--hot);
+  border-color: rgba(244, 114, 182, 0.5);
+  transform: scale(1.08);
+}
+.react-picker {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  background: #241245;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 8px;
+  margin-top: 6px;
+  animation: chip-pop 0.15s ease both;
+}
+.react-pick {
+  background: none;
+  border: none;
+  font-size: 22px;
+  padding: 4px 0;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: transform 0.1s;
+}
+.react-pick:hover {
+  transform: scale(1.25);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 /* ---------- QR modal ---------- */
 .qr-card {
   background: #fff;
