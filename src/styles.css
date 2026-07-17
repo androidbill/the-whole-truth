@@ -162,6 +162,26 @@ body {
   color: rgba(245, 239, 255, 0.3);
 }
 
+/* Shorter screens (e.g. Android with the install banner showing): tighten
+   vertical spacing so the whole home screen fits without scrolling. */
+@media (max-height: 760px) {
+  .screen-home {
+    gap: 10px;
+  }
+  .screen-home .logo {
+    margin-top: 3vh;
+  }
+  .screen-home .tagline {
+    margin: 6px 0 14px;
+  }
+  .install-banner {
+    margin-top: 10px;
+  }
+  .version {
+    padding-top: 14px;
+  }
+}
+
 /* ---------- Buttons ---------- */
 .btn {
   border: none;
