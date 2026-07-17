@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.08'
+export const APP_VERSION = '2026.07.17.09'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -696,7 +696,7 @@ function ProfileForm({ profile, setProfile }) {
       <input
         className="input"
         maxLength={16}
-        placeholder="e.g. Salty Vixen"
+        placeholder="e.g. SaltedCod"
         value={profile.name}
         onChange={(e) => setProfile({ ...profile, name: e.target.value })}
       />
