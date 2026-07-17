@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.07'
+export const APP_VERSION = '2026.07.17.08'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -696,7 +696,7 @@ function ProfileForm({ profile, setProfile }) {
       <input
         className="input"
         maxLength={16}
-        placeholder="e.g. Big Bill"
+        placeholder="e.g. Salty Vixen"
         value={profile.name}
         onChange={(e) => setProfile({ ...profile, name: e.target.value })}
       />
@@ -704,7 +704,7 @@ function ProfileForm({ profile, setProfile }) {
       <input
         className="input"
         maxLength={20}
-        placeholder="e.g. Bill"
+        placeholder="e.g. John"
         value={profile.first || ''}
         onChange={(e) => setProfile({ ...profile, first: e.target.value })}
       />
@@ -712,7 +712,7 @@ function ProfileForm({ profile, setProfile }) {
       <input
         className="input"
         maxLength={20}
-        placeholder="e.g. Parsons"
+        placeholder="e.g. Smith"
         value={profile.last || ''}
         onChange={(e) => setProfile({ ...profile, last: e.target.value })}
       />
