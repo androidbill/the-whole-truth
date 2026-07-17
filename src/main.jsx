@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.06'
+export const APP_VERSION = '2026.07.17.07'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -627,6 +627,28 @@ function HomeScreen({ onCreate, onJoin }) {
   )
 }
 
+// Profanity filter for names. Substring list = words that essentially never
+// occur inside legitimate names (catches 'fuckface' etc.). Word list = words
+// that DO occur inside real names (Cassidy, Dickson, Hancock), so they only
+// match as a whole word. Leet characters are normalized first.
+const LEET = { 0: 'o', 1: 'i', '!': 'i', 3: 'e', 4: 'a', '@': 'a', 5: 's', $: 's', 7: 't' }
+const BAD_SUBSTRINGS = [
+  'fuck', 'shit', 'cunt', 'bitch', 'wank', 'jizz', 'nigger', 'nigga', 'faggot',
+  'retard', 'whore', 'slut', 'dildo', 'boner', 'handjob', 'blowjob', 'cocksuck',
+  'dickhead', 'asshole', 'douche', 'pussy', 'tranny', 'penis', 'queef', 'smegma',
+]
+const BAD_WORDS = [
+  'ass', 'arse', 'dick', 'cock', 'piss', 'tits', 'cum', 'sex', 'hoe', 'crap',
+  'twat', 'prick', 'fag', 'homo', 'anal', 'spic', 'kike', 'chink', 'porn',
+]
+function hasProfanity(text) {
+  const norm = (text || '').toLowerCase().replace(/[013457!@$]/g, (c) => LEET[c] || c)
+  const squashed = norm.replace(/[^a-z]/g, '')
+  if (BAD_SUBSTRINGS.some((w) => squashed.includes(w))) return true
+  const tokens = norm.split(/[^a-z]+/)
+  return tokens.some((t) => BAD_WORDS.includes(t))
+}
+
 function playerFromProfile(profile) {
   return {
     name: profile.name.trim(),
@@ -644,6 +666,14 @@ function profileError(profile) {
   if (!profile.first?.trim()) return "What's your first name?"
   if (!profile.last?.trim()) return "What's your last name?"
   if (!profile.gender) return 'Choose male or female.'
+  const fields = [
+    ['nickname', profile.name],
+    ['first name', profile.first],
+    ['last name', profile.last],
+  ]
+  for (const [label, value] of fields) {
+    if (hasProfanity(value)) return `Whoa — keep your ${label} clean! 😅`
+  }
   return null
 }
 
