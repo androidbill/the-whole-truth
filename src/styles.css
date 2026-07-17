@@ -30,7 +30,7 @@ body {
   background: var(--bg-0);
   color: var(--ink);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  min-height: 100%;
+  height: 100%;
 }
 
 body {
@@ -41,10 +41,14 @@ body {
   background-attachment: fixed;
 }
 
-#root,
+/* Percentage chain instead of vh/dvh: viewport units overshoot the visible
+   area in installed PWAs on newer Android (they include the system-bar
+   regions), which pushed bottom-pinned content below the screen. */
+#root {
+  height: 100%;
+}
 .app {
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 100%;
 }
 
 .app {
