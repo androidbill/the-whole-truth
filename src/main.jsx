@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.11'
+export const APP_VERSION = '2026.07.17.12'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -666,8 +666,8 @@ function profileError(profile) {
   if (!profile.first?.trim()) return "What's your first name?"
   if (!profile.last?.trim()) return "What's your last name?"
   if (!profile.gender) return 'Choose male or female.'
+  // Nickname is allowed to be crude — real names are not.
   const fields = [
-    ['nickname', profile.name],
     ['first name', profile.first],
     ['last name', profile.last],
   ]
