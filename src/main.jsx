@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.15.03'
+export const APP_VERSION = '2026.07.17.01'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -235,10 +235,12 @@ function getStore() {
     storePromise = (async () => {
       if (!ONLINE_MODE) return makeLocalStore()
       const { initializeApp } = await import('firebase/app')
-      const { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, deleteField } =
+      const { initializeFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, deleteField } =
         await import('firebase/firestore')
       const app = initializeApp(FB)
-      const db = getFirestore(app)
+      // Long polling instead of streamed responses: WebKit (all iOS browsers)
+      // buffers Firestore's stream, delaying snapshots by seconds.
+      const db = initializeFirestore(app, { experimentalForceLongPolling: true })
       const ref = (code) => doc(db, 'rooms', code)
       const mapPatch = (patch) => {
         const out = {}
@@ -258,7 +260,7 @@ function getStore() {
           await updateDoc(ref(code), mapPatch(patch))
         },
         watch(code, cb) {
-          return onSnapshot(
+          const unsub = onSnapshot(
             ref(code),
             (snap) => cb(snap.exists() ? snap.data() : null),
             (err) => {
@@ -266,6 +268,19 @@ function getStore() {
               notify('Connection hiccup — retrying…')
             }
           )
+          // iOS suspends the connection when the screen locks; on wake, fetch
+          // the room once so players catch up before the stream reconnects.
+          const onVis = () => {
+            if (document.visibilityState !== 'visible') return
+            getDoc(ref(code))
+              .then((snap) => cb(snap.exists() ? snap.data() : null))
+              .catch(() => {})
+          }
+          document.addEventListener('visibilitychange', onVis)
+          return () => {
+            unsub()
+            document.removeEventListener('visibilitychange', onVis)
+          }
         },
       }
     })()
