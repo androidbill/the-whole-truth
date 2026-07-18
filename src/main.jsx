@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.18'
+export const APP_VERSION = '2026.07.17.19'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -336,6 +336,25 @@ const DECKS = [
   { id: 'spicy', emoji: '🌶️', name: 'Spicy', blurb: '18+ · cheeky & embarrassing' },
   { id: 'mixed', emoji: '🎭', name: 'Mixed', blurb: 'A shot of both, shaken' },
 ]
+
+// Party themes: the host picks one at creation and every player's app
+// re-skins to match (data-theme attribute drives the CSS variables).
+const THEMES = [
+  { id: 'violet', name: 'Neon Nights', swatch: 'linear-gradient(135deg, #a21caf, #7c3aed, #db2777)' },
+  { id: 'crimson', name: 'Crimson Pulse', swatch: 'linear-gradient(135deg, #991b1b, #dc2626, #f43f5e)' },
+  { id: 'gold', name: 'Gold Rush', swatch: 'linear-gradient(135deg, #b45309, #f59e0b, #fbbf24)' },
+  { id: 'teal', name: 'Tidal Wave', swatch: 'linear-gradient(135deg, #0f766e, #14b8a6, #22d3ee)' },
+  { id: 'emerald', name: 'Emerald Haze', swatch: 'linear-gradient(135deg, #166534, #22c55e, #86efac)' },
+  { id: 'sunset', name: 'Sunset Blaze', swatch: 'linear-gradient(135deg, #9a3412, #ea580c, #fbbf24)' },
+  { id: 'ice', name: 'Arctic Chill', swatch: 'linear-gradient(135deg, #1d4ed8, #38bdf8, #a5f3fc)' },
+  { id: 'bubblegum', name: 'Bubblegum Pop', swatch: 'linear-gradient(135deg, #be185d, #ec4899, #f9a8d4)' },
+  { id: 'lime', name: 'Toxic Lime', swatch: 'linear-gradient(135deg, #4d7c0f, #84cc16, #d9f99d)' },
+  { id: 'sapphire', name: 'Midnight Sapphire', swatch: 'linear-gradient(135deg, #1e40af, #3b82f6, #93c5fd)' },
+]
+
+function applyTheme(id) {
+  document.documentElement.dataset.theme = id && id !== 'violet' ? id : ''
+}
 
 function playerList(room) {
   return Object.entries(room?.players || {})
@@ -843,7 +862,14 @@ function ProfileForm({ profile, setProfile }) {
 function CreateScreen({ profile, setProfile, onBack, onCreated }) {
   const [deck, setDeck] = useState('mixed')
   const [cycles, setCycles] = useState(1)
+  const [theme, setTheme] = useState('violet')
   const [busy, setBusy] = useState(false)
+
+  // Live preview while picking; App re-applies the room's theme after create.
+  useEffect(() => {
+    applyTheme(theme)
+    return () => applyTheme('')
+  }, [theme])
 
   const create = async () => {
     const err = profileError(profile)
@@ -863,6 +889,7 @@ function CreateScreen({ profile, setProfile, onBack, onCreated }) {
         hostId: id,
         deck,
         cycles,
+        theme,
         timerOn: true,
         phase: 'lobby',
         players: { [id]: playerFromProfile(profile) },
@@ -897,6 +924,19 @@ function CreateScreen({ profile, setProfile, onBack, onCreated }) {
             <span className="deck-emoji">{d.emoji}</span>
             <span className="deck-name">{d.name}</span>
             <span className="deck-blurb">{d.blurb}</span>
+          </button>
+        ))}
+      </div>
+      <label className="field-label">Party theme</label>
+      <div className="theme-grid">
+        {THEMES.map((t) => (
+          <button
+            key={t.id}
+            className={'theme-card' + (theme === t.id ? ' theme-sel' : '')}
+            onClick={() => setTheme(t.id)}
+          >
+            <span className="theme-swatch" style={{ background: t.swatch }} />
+            <span className="theme-name">{t.name}</span>
           </button>
         ))}
       </div>
@@ -1554,6 +1594,11 @@ function App() {
       }
     }
   }, [room, id, session?.code, act])
+
+  // Everyone's app re-skins to the room's party theme
+  useEffect(() => {
+    applyTheme(room?.theme)
+  }, [room?.theme])
 
   // Record finished games in this device's history
   useEffect(() => {
