@@ -1,5 +1,5 @@
 // ============================================================
-//  THE WHOLE TRUTH — a party game of beautiful lies
+//  NOTHING BUT LIES — a party game of beautiful lies
 //  Everyone answers a question about one player. Everyone votes
 //  for their favorite answer. Best liar wins.
 // ============================================================
@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.18.03'
+export const APP_VERSION = '2026.07.18.04'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -183,7 +183,7 @@ async function shareApp() {
   try {
     if (navigator.share) {
       await navigator.share({
-        title: 'The Whole Truth',
+        title: 'Nothing But Lies',
         text: 'The party game where everyone lies about each other — come play!',
         url,
       })
@@ -624,12 +624,10 @@ async function shareResults(room) {
     ctx.textAlign = 'center'
     ctx.fillStyle = 'rgba(245,239,255,0.6)'
     ctx.font = '300 44px system-ui, sans-serif'
-    ctx.fillText('T H E', W / 2, 130)
+    ctx.fillText('N O T H I N G   B U T', W / 2, 150)
     ctx.fillStyle = hot
-    ctx.font = '900 128px system-ui, sans-serif'
-    ctx.fillText('WHOLE', W / 2, 250)
-    ctx.fillStyle = '#f5efff'
-    ctx.fillText('TRUTH', W / 2, 375)
+    ctx.font = '900 190px system-ui, sans-serif'
+    ctx.fillText('LIES', W / 2, 340)
     const win = rows[0]
     ctx.font = '110px system-ui, sans-serif'
     ctx.fillText(win?.emoji || '👑', W / 2, 530)
@@ -658,9 +656,9 @@ async function shareResults(room) {
     ctx.fillText(appUrl().replace(/^https?:\/\//, ''), W / 2, H - 56)
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
     if (!blob) return
-    const file = new File([blob], 'the-whole-truth-results.png', { type: 'image/png' })
+    const file = new File([blob], 'nothing-but-lies-results.png', { type: 'image/png' })
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'The Whole Truth' })
+      await navigator.share({ files: [file], title: 'Nothing But Lies' })
     } else {
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
@@ -734,9 +732,8 @@ function Confetti() {
 function Logo({ small }) {
   return (
     <div className={'logo' + (small ? ' logo-small' : '')}>
-      <span className="logo-the">THE</span>
-      <span className="logo-whole">WHOLE</span>
-      <span className="logo-truth">TRUTH</span>
+      <span className="logo-the">NOTHING BUT</span>
+      <span className="logo-whole">LIES</span>
     </div>
   )
 }
@@ -805,9 +802,9 @@ function AboutModal({ onClose }) {
         <img
           className="about-icon"
           src={import.meta.env.BASE_URL + 'icons/icon-192.png'}
-          alt="The Whole Truth icon"
+          alt="Nothing But Lies icon"
         />
-        <div className="about-name">The Whole Truth</div>
+        <div className="about-name">Nothing But Lies</div>
         <div className="about-by">Created by {APP_AUTHOR}</div>
         <div className="about-version">Version {APP_VERSION}</div>
         <button className="btn btn-ghost" onClick={onClose}>
@@ -1008,7 +1005,7 @@ function HomeScreen({ onCreate, onJoin }) {
         <button className="install-banner" onClick={promptInstall}>
           <img src={import.meta.env.BASE_URL + 'icons/icon-192.png'} alt="" />
           <span>
-            <b>Install The Whole Truth</b>
+            <b>Install Nothing But Lies</b>
             <small>Free · full screen · works like a real app</small>
           </span>
           <span className="install-cta">Install</span>
@@ -1978,7 +1975,7 @@ function FinalScreen({ room, me, isHost, act, onLeave }) {
   return (
     <div className="screen screen-final">
       <Confetti />
-      <div className="final-title">🏆 THE WHOLE TRUTH 🏆</div>
+      <div className="final-title">🏆 NOTHING BUT LIES 🏆</div>
       <div className="podium">
         {podium[1] && (
           <div className="podium-col podium-2">

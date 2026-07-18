@@ -1,4 +1,4 @@
-// Question decks for The Whole Truth.
+// Question decks for Nothing But Lies.
 // {P} is replaced with the subject player's first name.
 // {they} {them} {their} {theirs} {themselves} resolve to he/she pronouns
 // based on the subject's chosen sex (see questionText in main.jsx).

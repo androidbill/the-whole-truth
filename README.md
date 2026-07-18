@@ -1,4 +1,6 @@
-# The Whole Truth 🎭
+# Nothing But Lies 🎭
+
+> Formerly "The Whole Truth" — renamed 2026-07-18. Repo, URL, and Firebase project keep the old name.
 
 A Psych-style party game (inspired by "The Naked Truth" deck): each round asks a
 question about one player in the room. Everyone — including the subject — writes
