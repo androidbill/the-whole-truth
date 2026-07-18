@@ -499,6 +499,16 @@ body {
   border-color: var(--hot);
   background: rgba(244, 114, 182, 0.14);
 }
+.seg-mode .seg-btn {
+  font-size: 14px;
+  padding: 12px 4px;
+}
+.mode-blurb {
+  font-size: 12px;
+  color: var(--ink-dim);
+  line-height: 1.4;
+  padding: 0 4px;
+}
 
 /* ---------- Lobby ---------- */
 .code-box {
@@ -589,6 +599,18 @@ body {
 }
 .chip-dim {
   opacity: 0.45;
+}
+.chip-kick {
+  background: none;
+  border: none;
+  color: var(--ink-dim);
+  font-size: 13px;
+  font-weight: 900;
+  padding: 0 0 0 2px;
+  cursor: pointer;
+}
+.chip-kick:hover {
+  color: #fb7185;
 }
 
 .waiting-pulse {
@@ -1156,6 +1178,15 @@ body {
 .history-votes {
   color: var(--ink-dim);
   font-size: 13px;
+}
+.history-quote {
+  margin-top: 8px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink-dim);
+  border-top: 1px solid var(--card-border);
+  padding-top: 8px;
+  line-height: 1.4;
 }
 
 /* ---------- Answer reactions ---------- */

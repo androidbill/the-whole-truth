@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.19'
+export const APP_VERSION = '2026.07.17.20'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -63,6 +63,74 @@ const DELETE = '__DELETE__'
 // Write-phase countdown (seconds). Players who haven't submitted when it
 // expires get skipped. Host can toggle it any time.
 const WRITE_SECONDS = 135
+// Vote-phase countdown — voting is quicker than writing.
+const VOTE_SECONDS = 90
+
+// ------------------------------------------------------------
+// Sounds & haptics (synthesized — no audio assets, works offline)
+// ------------------------------------------------------------
+const LS_SOUND = 'twt-sound'
+let soundOn = localStorage.getItem(LS_SOUND) !== 'off'
+function isSoundOn() {
+  return soundOn
+}
+function setSoundOn(on) {
+  soundOn = on
+  localStorage.setItem(LS_SOUND, on ? 'on' : 'off')
+}
+let actx = null
+function audioCtx() {
+  if (!actx) {
+    try {
+      actx = new (window.AudioContext || window.webkitAudioContext)()
+    } catch {}
+  }
+  if (actx && actx.state === 'suspended') actx.resume().catch(() => {})
+  return actx
+}
+// iOS only allows audio after a user gesture — prime the context on first tap.
+window.addEventListener('pointerdown', () => audioCtx(), { once: true })
+
+function tone(freq, dur = 0.08, type = 'triangle', vol = 0.05, delay = 0) {
+  const ctx = audioCtx()
+  if (!ctx) return
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = type
+  osc.frequency.value = freq
+  gain.gain.setValueAtTime(vol, ctx.currentTime + delay)
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + delay + dur)
+  osc.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(ctx.currentTime + delay)
+  osc.stop(ctx.currentTime + delay + dur + 0.02)
+}
+function vibrate(pattern) {
+  if (soundOn && navigator.vibrate) {
+    try {
+      navigator.vibrate(pattern)
+    } catch {}
+  }
+}
+function sfx(name) {
+  if (!soundOn) return
+  if (name === 'tick') tone(900, 0.04, 'square', 0.03)
+  else if (name === 'pop') {
+    tone(440, 0.06, 'sine', 0.06)
+    tone(660, 0.08, 'sine', 0.05, 0.05)
+  } else if (name === 'phase') {
+    tone(523, 0.09)
+    tone(659, 0.09, 'triangle', 0.05, 0.09)
+    tone(784, 0.12, 'triangle', 0.05, 0.18)
+  } else if (name === 'reveal') {
+    tone(392, 0.1)
+    tone(494, 0.1, 'triangle', 0.05, 0.1)
+    tone(587, 0.16, 'triangle', 0.06, 0.2)
+  } else if (name === 'fanfare') {
+    ;[523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, 'triangle', 0.07, i * 0.12))
+    vibrate([60, 40, 60, 40, 140])
+  }
+}
 
 // ------------------------------------------------------------
 // PWA: install prompt + update detection + hard refresh
@@ -194,6 +262,19 @@ const FB = {
   appId: import.meta.env.VITE_FB_APP_ID || '1:924562869097:web:55d689399e8f5e8a954bf8',
 }
 const FORCE_LOCAL = new URLSearchParams(location.search).has('local')
+// Scan-to-join deep link: ...?join=CODE opens the join screen prefilled.
+const JOIN_CODE = (new URLSearchParams(location.search).get('join') || '')
+  .toUpperCase()
+  .replace(/[^A-Z]/g, '')
+  .slice(0, 4)
+function stripJoinParam() {
+  try {
+    const u = new URL(location.href)
+    if (!u.searchParams.has('join')) return
+    u.searchParams.delete('join')
+    history.replaceState(null, '', u.toString())
+  } catch {}
+}
 export const ONLINE_MODE = !!(FB.apiKey && FB.projectId) && !FORCE_LOCAL
 
 function makeLocalStore() {
@@ -356,6 +437,36 @@ function applyTheme(id) {
   document.documentElement.dataset.theme = id && id !== 'violet' ? id : ''
 }
 
+// Shared round countdown. Returns remaining ms (null if timer off) and
+// plays a tick each of the last 10 seconds.
+function useCountdown(enabled, started, seconds) {
+  const [now, setNow] = useState(Date.now)
+  const lastTick = useRef(null)
+  useEffect(() => {
+    if (!enabled || !started) return
+    const iv = setInterval(() => setNow(Date.now()), 400)
+    return () => clearInterval(iv)
+  }, [enabled, started])
+  const remaining = enabled && started ? Math.max(0, seconds * 1000 - (now - started)) : null
+  useEffect(() => {
+    if (remaining === null || remaining > 10000 || remaining <= 0) return
+    const s = Math.ceil(remaining / 1000)
+    if (lastTick.current !== s) {
+      lastTick.current = s
+      sfx('tick')
+      vibrate(25)
+    }
+  }, [remaining])
+  return remaining
+}
+
+function TimerPill({ remaining }) {
+  if (remaining === null) return null
+  const secs = Math.ceil(remaining / 1000)
+  const clock = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0')
+  return <div className={'timer-pill' + (remaining <= 15000 ? ' timer-low' : '')}>⏱ {clock}</div>
+}
+
 function playerList(room) {
   return Object.entries(room?.players || {})
     .map(([id, p]) => ({ id, ...p }))
@@ -419,7 +530,15 @@ function saveGameToHistory(room) {
     if (localStorage.getItem(LS_HISTORY_LAST) === key) return
     localStorage.setItem(LS_HISTORY_LAST, key)
     const list = loadHistory()
-    list.unshift({ at: Date.now(), code: room.code, deck: room.deck, players })
+    list.unshift({
+      at: Date.now(),
+      code: room.code,
+      deck: room.deck,
+      mode: room.mode || 'lies',
+      players,
+      bestLie: room.bestLie || null,
+      bestReacted: room.bestReacted || null,
+    })
     localStorage.setItem(LS_HISTORY, JSON.stringify(list.slice(0, 50)))
   } catch {}
 }
@@ -493,13 +612,18 @@ function Logo({ small }) {
   )
 }
 
-function PlayerChip({ p, done, dim, host }) {
+function PlayerChip({ p, done, dim, host, onKick }) {
   return (
     <div className={'chip' + (done ? ' chip-done' : '') + (dim ? ' chip-dim' : '')}>
       <span className="chip-emoji">{p.emoji}</span>
       <span className="chip-name">{p.name}</span>
       {host && <span className="chip-host">HOST</span>}
       {done && <span className="chip-check">✓</span>}
+      {onKick && (
+        <button className="chip-kick" aria-label={'Remove ' + p.name} onClick={onKick}>
+          ✕
+        </button>
+      )}
     </div>
   )
 }
@@ -598,6 +722,17 @@ function HistoryModal({ onClose }) {
                       </span>
                     </div>
                   ))}
+                  {g.bestLie && (
+                    <div className="history-quote">
+                      🏆 “{g.bestLie.text}” — {g.bestLie.by} ({g.bestLie.votes} vote
+                      {g.bestLie.votes === 1 ? '' : 's'})
+                    </div>
+                  )}
+                  {g.bestReacted && (
+                    <div className="history-quote">
+                      {g.bestReacted.emoji} “{g.bestReacted.text}” — {g.bestReacted.by}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -611,9 +746,9 @@ function HistoryModal({ onClose }) {
   )
 }
 
-function QrModal({ onClose }) {
+function QrModal({ onClose, url: urlProp, title = 'Scan to open the app' }) {
   const canvasRef = useRef(null)
-  const url = appUrl()
+  const url = urlProp || appUrl()
   useEffect(() => {
     let cancelled = false
     import('qrcode').then(({ default: QRCode }) => {
@@ -631,7 +766,7 @@ function QrModal({ onClose }) {
   return (
     <div className="about-overlay" onClick={onClose}>
       <div className="about-card qr-card" onClick={(e) => e.stopPropagation()}>
-        <div className="about-name">Scan to open the app</div>
+        <div className="about-name">{title}</div>
         <canvas ref={canvasRef} className="qr-canvas" />
         <div className="qr-url">{url}</div>
         <button className="btn btn-primary" onClick={onClose}>
@@ -655,6 +790,7 @@ function HomeScreen({ onCreate, onJoin }) {
   const [about, setAbout] = useState(false)
   const [qr, setQr] = useState(false)
   const [history, setHistory] = useState(false)
+  const [sound, setSound] = useState(isSoundOn)
   const canInstall = useCanInstall()
   return (
     <div className="screen screen-home">
@@ -696,6 +832,15 @@ function HomeScreen({ onCreate, onJoin }) {
                 }}
               >
                 📜 History
+              </button>
+              <button
+                className="menu-item"
+                onClick={() => {
+                  setSoundOn(!sound)
+                  setSound(!sound)
+                }}
+              >
+                {sound ? '🔊 Sound: On' : '🔇 Sound: Off'}
               </button>
               <button
                 className="menu-item"
@@ -779,6 +924,7 @@ function playerFromProfile(profile) {
     emoji: profile.emoji,
     score: 0,
     joinedAt: Date.now(),
+    seen: Date.now(),
   }
 }
 
@@ -863,6 +1009,7 @@ function CreateScreen({ profile, setProfile, onBack, onCreated }) {
   const [deck, setDeck] = useState('mixed')
   const [cycles, setCycles] = useState(1)
   const [theme, setTheme] = useState('violet')
+  const [mode, setMode] = useState('lies')
   const [busy, setBusy] = useState(false)
 
   // Live preview while picking; App re-applies the room's theme after create.
@@ -890,6 +1037,7 @@ function CreateScreen({ profile, setProfile, onBack, onCreated }) {
         deck,
         cycles,
         theme,
+        mode,
         timerOn: true,
         phase: 'lobby',
         players: { [id]: playerFromProfile(profile) },
@@ -913,6 +1061,26 @@ function CreateScreen({ profile, setProfile, onBack, onCreated }) {
       <button className="btn-back" onClick={onBack}>‹ Back</button>
       <h2 className="form-title">Start a Party</h2>
       <ProfileForm profile={profile} setProfile={setProfile} />
+      <label className="field-label">Game mode</label>
+      <div className="seg seg-mode">
+        <button
+          className={'seg-btn' + (mode === 'lies' ? ' seg-sel' : '')}
+          onClick={() => setMode('lies')}
+        >
+          🃏 Best Lie Wins
+        </button>
+        <button
+          className={'seg-btn' + (mode === 'truth' ? ' seg-sel' : '')}
+          onClick={() => setMode('truth')}
+        >
+          🕵️ Find the Truth
+        </button>
+      </div>
+      <div className="mode-blurb">
+        {mode === 'lies'
+          ? 'Everyone answers, everyone votes for their favorite. Best liar wins.'
+          : 'The subject answers truthfully, everyone else fakes it. Spot the truth to score — or fool them with your lie.'}
+      </div>
       <label className="field-label">Question deck</label>
       <div className="deck-grid">
         {DECKS.map((d) => (
@@ -1021,6 +1189,8 @@ function LobbyScreen({ room, me, isHost, act, onLeave }) {
   const players = playerList(room)
   const canStart = players.length >= 3
   const deck = DECKS.find((d) => d.id === room.deck) || DECKS[2]
+  const [joinQr, setJoinQr] = useState(false)
+  const joinUrl = appUrl() + '?join=' + room.code
 
   const start = () => {
     const ids = shuffle(players.map((p) => p.id))
@@ -1033,6 +1203,8 @@ function LobbyScreen({ room, me, isHost, act, onLeave }) {
       questions: pool.slice(0, totalQ),
       qIndex: 0,
       totalQ,
+      bestLie: DELETE,
+      bestReacted: DELETE,
       current: { answers: {}, votes: {}, revealOrder: [], reactions: {}, writeStarted: Date.now() },
     }
     for (const p of players) patch['players.' + p.id + '.score'] = 0
@@ -1048,13 +1220,33 @@ function LobbyScreen({ room, me, isHost, act, onLeave }) {
         <div className="code-hint">
           {ONLINE_MODE ? 'Friends join on their phones with this code' : 'Open another tab and join with this code'}
         </div>
+        {ONLINE_MODE && (
+          <button className="btn-link" onClick={() => setJoinQr(true)}>
+            📱 Show QR to join
+          </button>
+        )}
       </div>
+      {joinQr && (
+        <QrModal url={joinUrl} title="Scan to join this party" onClose={() => setJoinQr(false)} />
+      )}
       <div className="lobby-deck">
         {deck.emoji} {deck.name} deck · {room.cycles} question{room.cycles > 1 ? 's' : ''} per player
       </div>
       <div className="chips chips-lobby">
         {players.map((p) => (
-          <PlayerChip key={p.id} p={p} host={p.id === room.hostId} />
+          <PlayerChip
+            key={p.id}
+            p={p}
+            host={p.id === room.hostId}
+            onKick={
+              isHost && p.id !== room.hostId
+                ? () => {
+                    if (confirm('Remove ' + p.name + ' from the party?'))
+                      act({ ['players.' + p.id]: DELETE })
+                  }
+                : undefined
+            }
+          />
         ))}
       </div>
       {isHost ? (
@@ -1092,6 +1284,8 @@ function HostControls({ room, act }) {
       totalQ: 0,
       order: [],
       questions: [],
+      bestLie: DELETE,
+      bestReacted: DELETE,
       current: { answers: {}, votes: {}, revealOrder: [], reactions: {} },
     }
     for (const id of Object.keys(room.players || {})) patch['players.' + id + '.score'] = 0
@@ -1122,16 +1316,9 @@ function WriteScreen({ room, me, isHost, act }) {
   const [editing, setEditing] = useState(false)
   const doneIds = Object.keys(answers)
 
-  // Shared countdown: everyone computes from the same start timestamp.
+  const truthMode = room.mode === 'truth'
   const timerOn = !!room.timerOn
-  const started = room.current?.writeStarted || 0
-  const [now, setNow] = useState(Date.now)
-  useEffect(() => {
-    if (!timerOn || !started) return
-    const iv = setInterval(() => setNow(Date.now()), 500)
-    return () => clearInterval(iv)
-  }, [timerOn, started])
-  const remaining = timerOn && started ? Math.max(0, WRITE_SECONDS * 1000 - (now - started)) : null
+  const remaining = useCountdown(timerOn, room.current?.writeStarted || 0, WRITE_SECONDS)
 
   // Host device enforces the deadline: advance with whoever submitted.
   const expiredFired = useRef(false)
@@ -1141,25 +1328,31 @@ function WriteScreen({ room, me, isHost, act }) {
     act({ __host_force: doneIds.length >= 1 ? 'vote' : 'reveal' })
   }, [isHost, remaining, doneIds.length, act])
 
-  const secs = remaining === null ? 0 : Math.ceil(remaining / 1000)
-  const clock = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0')
-
   const submit = () => {
     const t = text.trim()
     if (!t) return
     act({ ['current.answers.' + me.id]: t })
     setEditing(false)
+    sfx('pop')
+    vibrate(20)
   }
 
   return (
     <div className="screen screen-play">
       <RoundHeader room={room} />
-      {remaining !== null && (
-        <div className={'timer-pill' + (remaining <= 15000 ? ' timer-low' : '')}>⏱ {clock}</div>
-      )}
+      <TimerPill remaining={remaining} />
       <div className="subject-banner">
         <span className="subject-emoji">{subj?.emoji}</span>
-        This one's about <b>{isSubject ? 'YOU' : subj?.first || subj?.name}</b>
+        {truthMode && isSubject ? (
+          <>
+            They're all lying about <b>YOU</b> — tell the truth!
+          </>
+        ) : (
+          <>
+            This one's about <b>{isSubject ? 'YOU' : subj?.first || subj?.name}</b>
+            {truthMode && ' — make your lie believable'}
+          </>
+        )}
       </div>
       <h2 className="question">{questionText(room)}</h2>
       {!mine || editing ? (
@@ -1168,7 +1361,15 @@ function WriteScreen({ room, me, isHost, act }) {
             className="answer-input"
             maxLength={120}
             rows={3}
-            placeholder={isSubject ? 'Defend yourself… or lean into it' : 'Make it juicy. Make it believable.'}
+            placeholder={
+              truthMode
+                ? isSubject
+                  ? 'Tell the whole truth…'
+                  : "Write a lie they'll swallow whole"
+                : isSubject
+                  ? 'Defend yourself… or lean into it'
+                  : 'Make it juicy. Make it believable.'
+            }
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
@@ -1223,18 +1424,39 @@ function VoteScreen({ room, me, isHost, act }) {
   const myVote = votes[me.id]
   const subj = subjectOf(room)
   const doneIds = Object.keys(votes)
+  const truthMode = room.mode === 'truth'
+  const iAmSubject = subj?.id === me.id
+  const blocked = truthMode && iAmSubject
   const voteFor = (pid) => {
-    if (pid === me.id) return
+    if (pid === me.id || blocked) return
     act({ ['current.votes.' + me.id]: pid })
+    sfx('pop')
+    vibrate(20)
   }
-  const canVote = order.some((pid) => pid !== me.id)
+  const canVote = !blocked && order.some((pid) => pid !== me.id)
+
+  const timerOn = !!room.timerOn
+  const remaining = useCountdown(timerOn, room.current?.voteStarted || 0, VOTE_SECONDS)
+  const expiredFired = useRef(false)
+  useEffect(() => {
+    if (!isHost || remaining === null || remaining > 0 || expiredFired.current) return
+    expiredFired.current = true
+    act({ __host_force: 'reveal' })
+  }, [isHost, remaining, act])
 
   return (
     <div className="screen screen-play">
       <RoundHeader room={room} />
+      <TimerPill remaining={remaining} />
       <h2 className="question question-small">{questionText(room)}</h2>
       <div className="vote-hint">
-        {myVote ? 'Locked in! You can still change your mind…' : 'Vote for your favorite answer'}
+        {blocked
+          ? "They're hunting your truth — sit tight and watch them squirm!"
+          : myVote
+            ? 'Locked in! You can still change your mind…'
+            : truthMode
+              ? 'Which answer is the TRUTH?'
+              : 'Vote for your favorite answer'}
       </div>
       <div className="vote-list">
         {order.map((pid, i) => (
@@ -1245,7 +1467,7 @@ function VoteScreen({ room, me, isHost, act }) {
               (myVote === pid ? ' vote-sel' : '') +
               (pid === me.id ? ' vote-own' : '')
             }
-            disabled={pid === me.id}
+            disabled={pid === me.id || blocked}
             onClick={() => voteFor(pid)}
           >
             <span className="vote-letter">{String.fromCharCode(65 + i)}</span>
@@ -1255,7 +1477,7 @@ function VoteScreen({ room, me, isHost, act }) {
           </button>
         ))}
       </div>
-      {!canVote && <div className="vote-hint">No one else answered — hang tight!</div>}
+      {!canVote && !blocked && <div className="vote-hint">No one else answered — hang tight!</div>}
       {myVote && <WaitBoard room={room} doneIds={doneIds} label="Waiting for the undecided…" />}
       {isHost && doneIds.length >= 1 && doneIds.length < playerList(room).length && (
         <button className="btn-link" onClick={() => act({ __host_force: 'reveal' })}>
@@ -1324,6 +1546,8 @@ function RevealScreen({ room, me, isHost, act }) {
   const react = (pid, emoji) => {
     act({ ['current.reactions.' + pid + '.' + me.id]: emoji })
     setPickerFor(null)
+    sfx('pop')
+    vibrate(20)
   }
   const rows = (room.current?.revealOrder || [])
     .map((pid) => ({
@@ -1334,12 +1558,41 @@ function RevealScreen({ room, me, isHost, act }) {
     }))
     .sort((a, b) => b.votes - a.votes)
   const isLast = room.qIndex + 1 >= room.totalQ
+  const truthMode = room.mode === 'truth'
 
   const next = () => {
+    // Hall of fame: carry forward the game's best-voted answer and the
+    // answer that collected the most reactions.
+    const patch = {}
+    const top = rows[0]
+    if (top && top.votes > (room.bestLie?.votes || 0)) {
+      patch.bestLie = { text: top.text, by: players[top.pid]?.name || '?', votes: top.votes }
+    }
+    let bestPid = null
+    let bestCount = 0
+    for (const [pid, byPlayer] of Object.entries(reactions)) {
+      const n = Object.keys(byPlayer || {}).length
+      if (n > bestCount) {
+        bestCount = n
+        bestPid = pid
+      }
+    }
+    if (bestPid && bestCount > (room.bestReacted?.count || 0)) {
+      const emojiCounts = {}
+      for (const e of Object.values(reactions[bestPid])) emojiCounts[e] = (emojiCounts[e] || 0) + 1
+      const topEmoji = Object.entries(emojiCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '😂'
+      patch.bestReacted = {
+        text: answers[bestPid],
+        by: players[bestPid]?.name || '?',
+        count: bestCount,
+        emoji: topEmoji,
+      }
+    }
     if (isLast) {
-      act({ phase: 'final' })
+      act({ ...patch, phase: 'final' })
     } else {
       act({
+        ...patch,
         phase: 'write',
         qIndex: room.qIndex + 1,
         current: { answers: {}, votes: {}, revealOrder: [], reactions: {}, writeStarted: Date.now() },
@@ -1358,7 +1611,11 @@ function RevealScreen({ room, me, isHost, act }) {
             <div className="reveal-meta">
               <span className="reveal-author">
                 {players[r.pid]?.emoji} {players[r.pid]?.name}
-                {r.pid === subj?.id && <span className="reveal-subject-tag">the subject!</span>}
+                {r.pid === subj?.id && (
+                  <span className="reveal-subject-tag">
+                    {truthMode ? 'THE TRUTH ✅' : 'the subject!'}
+                  </span>
+                )}
               </span>
               <span className="reveal-votes">
                 {r.voters.join(' ')} {r.votes > 0 ? `+${r.votes * 100}` : '·'}
@@ -1400,6 +1657,8 @@ function FinalScreen({ room, me, isHost, act, onLeave }) {
       totalQ: 0,
       order: [],
       questions: [],
+      bestLie: DELETE,
+      bestReacted: DELETE,
       current: { answers: {}, votes: {}, revealOrder: [], reactions: {} },
     }
     for (const p of rows) patch['players.' + p.id + '.score'] = 0
@@ -1466,7 +1725,8 @@ function FinalScreen({ room, me, isHost, act, onLeave }) {
 // ------------------------------------------------------------
 function App() {
   const id = myId()
-  const [view, setView] = useState('home') // home | create | join
+  // Arriving via a scanned join link goes straight to the join screen.
+  const [view, setView] = useState(JOIN_CODE ? 'join' : 'home') // home | create | join
   const [session, setSession] = useState(() => {
     try {
       return JSON.parse(idStorage().getItem(LS_SESSION)) || null
@@ -1526,6 +1786,7 @@ function App() {
     idStorage().setItem(LS_SESSION, JSON.stringify(s))
     setSession(s)
     setView('home')
+    stripJoinParam()
   }
   const leaveRoom = useCallback(async () => {
     const code = session?.code
@@ -1553,6 +1814,7 @@ function App() {
             await store.update(session.code, {
               phase: 'vote',
               'current.revealOrder': shuffle(pids),
+              'current.voteStarted': Date.now(),
             })
           } else if (target === 'reveal') {
             await store.update(session.code, buildScorePatch(room))
@@ -1578,11 +1840,15 @@ function App() {
       const done = Object.keys(current.answers || {})
       if (done.length >= players.length && done.length >= 2 && advanceKey.current !== 'w' + key) {
         advanceKey.current = 'w' + key
-        act({ phase: 'vote', 'current.revealOrder': shuffle(done) })
+        act({ phase: 'vote', 'current.revealOrder': shuffle(done), 'current.voteStarted': Date.now() })
       }
     } else if (room.phase === 'vote') {
       const answered = Object.keys(current.answers || {})
-      const eligible = players.filter((p) => answered.some((a) => a !== p))
+      // In truth mode the subject knows the answer and doesn't vote.
+      const subjId = room.order?.length ? room.order[room.qIndex % room.order.length] : null
+      const eligible = players.filter(
+        (p) => (room.mode !== 'truth' || p !== subjId) && answered.some((a) => a !== p)
+      )
       const voted = Object.keys(current.votes || {})
       if (
         eligible.length > 0 &&
@@ -1599,6 +1865,50 @@ function App() {
   useEffect(() => {
     applyTheme(room?.theme)
   }, [room?.theme])
+
+  // Presence heartbeat: stamp players.<id>.seen every 30s while visible.
+  // Uses a ref for act so the interval isn't reset by every snapshot.
+  const actRef = useRef(null)
+  actRef.current = act
+  const inRoom = !!(session?.code && room?.players?.[id])
+  useEffect(() => {
+    if (!inRoom) return
+    const beat = () => {
+      if (document.visibilityState === 'visible')
+        actRef.current?.({ ['players.' + id + '.seen']: Date.now() })
+    }
+    beat()
+    const iv = setInterval(beat, 30000)
+    return () => clearInterval(iv)
+  }, [inRoom, id])
+
+  // Host migration: if the host hasn't been seen for 90s (dead phone,
+  // closed app), the earliest-joined active player claims the crown.
+  useEffect(() => {
+    if (!room || !session?.code || !room.players?.[id] || room.hostId === id) return
+    const host = room.players[room.hostId]
+    const hostGone = !host || (host.seen && Date.now() - host.seen > 90000)
+    if (!hostGone) return
+    const candidates = playerList(room).filter(
+      (p) => p.id !== room.hostId && (p.id === id || (p.seen && Date.now() - p.seen < 60000))
+    )
+    if (candidates[0]?.id === id) {
+      act({ hostId: id })
+      notify('The host went missing — you are the new host! 👑')
+    }
+  }, [room, session?.code, id, act])
+
+  // Phase-change chimes
+  const prevPhase = useRef(null)
+  useEffect(() => {
+    const ph = room?.phase
+    if (prevPhase.current && ph && prevPhase.current !== ph && room?.players?.[id]) {
+      if (ph === 'vote' || ph === 'write') sfx('phase')
+      else if (ph === 'reveal') sfx('reveal')
+      else if (ph === 'final') sfx('fanfare')
+    }
+    prevPhase.current = ph
+  }, [room?.phase, room, id])
 
   // Record finished games in this device's history
   useEffect(() => {
@@ -1643,7 +1953,13 @@ function App() {
     )
   } else if (view === 'join') {
     screen = (
-      <JoinScreen profile={profile} setProfile={setProfile} onBack={() => setView('home')} onJoined={enterRoom} />
+      <JoinScreen
+        profile={profile}
+        setProfile={setProfile}
+        onBack={() => setView('home')}
+        onJoined={enterRoom}
+        prefillCode={JOIN_CODE}
+      />
     )
   } else {
     screen = <HomeScreen onCreate={() => setView('create')} onJoin={() => setView('join')} />
@@ -1665,14 +1981,21 @@ function App() {
   )
 }
 
-// Score patch: +100 per vote received, then reveal.
+// Score patch, then reveal.
+// Classic mode: +100 to the author per vote their answer received.
+// Truth mode: +100 to voters who found the truth; +100 to a liar per
+// voter their lie fooled.
 function buildScorePatch(room) {
-  const counts = {}
-  for (const target of Object.values(room?.current?.votes || {})) {
-    counts[target] = (counts[target] || 0) + 1
+  const votes = room?.current?.votes || {}
+  const truth = room?.mode === 'truth'
+  const subjId = room?.order?.length ? room.order[room.qIndex % room.order.length] : null
+  const gains = {}
+  for (const [voter, target] of Object.entries(votes)) {
+    if (truth && target === subjId) gains[voter] = (gains[voter] || 0) + 1
+    else gains[target] = (gains[target] || 0) + 1
   }
   const patch = { phase: 'reveal' }
-  for (const [pid, n] of Object.entries(counts)) {
+  for (const [pid, n] of Object.entries(gains)) {
     const cur = room.players[pid]?.score || 0
     patch['players.' + pid + '.score'] = cur + n * 100
   }
