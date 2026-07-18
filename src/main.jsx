@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.20'
+export const APP_VERSION = '2026.07.18.01'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -503,6 +503,40 @@ function tally(room) {
     counts[target] = (counts[target] || 0) + 1
   }
   return counts
+}
+
+// ------------------------------------------------------------
+// Question tracking: the host's device remembers every question it has
+// dealt (across games) and won't repeat one until the deck is exhausted.
+// ------------------------------------------------------------
+const LS_USED_Q = 'twt-used-questions'
+function loadUsedQuestions() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(LS_USED_Q)) || [])
+  } catch {
+    return new Set()
+  }
+}
+function drawQuestions(deckId, count) {
+  const all = buildDeck(deckId)
+  const used = loadUsedQuestions()
+  let fresh = shuffle(all.filter((q) => !used.has(q)))
+  const picked = []
+  while (picked.length < count) {
+    if (fresh.length === 0) {
+      // Deck exhausted: reset tracking for this deck's questions and keep
+      // dealing, but never repeat a question within the same game.
+      for (const q of all) used.delete(q)
+      fresh = shuffle(all.filter((q) => !picked.includes(q)))
+      if (fresh.length === 0) fresh = shuffle(all)
+    }
+    picked.push(fresh.pop())
+  }
+  for (const q of picked) used.add(q)
+  try {
+    localStorage.setItem(LS_USED_Q, JSON.stringify([...used]))
+  } catch {}
+  return picked
 }
 
 // ------------------------------------------------------------
@@ -1195,12 +1229,10 @@ function LobbyScreen({ room, me, isHost, act, onLeave }) {
   const start = () => {
     const ids = shuffle(players.map((p) => p.id))
     const totalQ = ids.length * (room.cycles || 1)
-    let pool = shuffle(buildDeck(room.deck))
-    while (pool.length < totalQ) pool = pool.concat(shuffle(buildDeck(room.deck)))
     const patch = {
       phase: 'write',
       order: ids,
-      questions: pool.slice(0, totalQ),
+      questions: drawQuestions(room.deck, totalQ),
       qIndex: 0,
       totalQ,
       bestLie: DELETE,
