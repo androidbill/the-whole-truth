@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.14'
+export const APP_VERSION = '2026.07.17.15'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -297,16 +297,25 @@ function getStore() {
           )
           // iOS suspends the connection when the screen locks; on wake, fetch
           // the room once so players catch up before the stream reconnects.
-          const onVis = () => {
-            if (document.visibilityState !== 'visible') return
+          const refetch = () => {
             getDoc(ref(code))
               .then((snap) => cb(snap.exists() ? snap.data() : null))
               .catch(() => {})
           }
+          const onVis = () => {
+            if (document.visibilityState === 'visible') refetch()
+          }
           document.addEventListener('visibilitychange', onVis)
+          // Watchdog: iOS can silently stall the long-poll stream (Low Power
+          // Mode, radio handoff) and reconnect backoff takes seconds. Poll
+          // while visible so nobody is ever more than ~5s behind.
+          const iv = setInterval(() => {
+            if (document.visibilityState === 'visible') refetch()
+          }, 5000)
           return () => {
             unsub()
             document.removeEventListener('visibilitychange', onVis)
+            clearInterval(iv)
           }
         },
       }

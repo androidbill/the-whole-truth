@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 
@@ -18,6 +18,19 @@ const versionJson = () => ({
       fileName: 'version.json',
       source: JSON.stringify({ version: appVersion() }),
     })
+  },
+  // Stamp APP_VERSION into the built sw.js: the browser only installs an
+  // updated service worker when the file's bytes change, so the version
+  // constant must move with every release.
+  closeBundle() {
+    const p = resolve(root, 'dist/sw.js')
+    try {
+      const src = readFileSync(p, 'utf8').replace(
+        /const VERSION = '[^']*'/,
+        `const VERSION = '${appVersion()}'`
+      )
+      writeFileSync(p, src)
+    } catch {}
   },
   configureServer(server) {
     server.middlewares.use('/version.json', (req, res) => {
