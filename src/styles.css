@@ -179,7 +179,9 @@ body {
   flex-direction: column;
   align-items: center;
   line-height: 0.95;
-  margin-top: 8vh;
+  /* clear the QR/menu buttons in the top corner — the NOTHING BUT line
+     spans most of the screen width */
+  margin-top: max(8vh, calc(64px + env(safe-area-inset-top)));
   user-select: none;
 }
 .logo-small {
@@ -269,7 +271,7 @@ body {
     gap: 10px;
   }
   .screen-home .logo {
-    margin-top: 3vh;
+    margin-top: max(3vh, calc(56px + env(safe-area-inset-top)));
   }
   .screen-home .tagline {
     margin: 6px 0 14px;
