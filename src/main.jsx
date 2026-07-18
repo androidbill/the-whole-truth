@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.13'
+export const APP_VERSION = '2026.07.17.14'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -1043,7 +1043,7 @@ function WriteScreen({ room, me, isHost, act }) {
       <RoundHeader room={room} />
       <div className="subject-banner">
         <span className="subject-emoji">{subj?.emoji}</span>
-        This one's about <b>{isSubject ? 'YOU' : subj?.name}</b>
+        This one's about <b>{isSubject ? 'YOU' : subj?.first || subj?.name}</b>
       </div>
       <h2 className="question">{questionText(room)}</h2>
       {!mine ? (
