@@ -494,6 +494,23 @@ body {
   opacity: 0.6;
   font-weight: 400;
 }
+.timer-pill {
+  align-self: center;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 5px 16px;
+  font-variant-numeric: tabular-nums;
+}
+.timer-low {
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, 0.6);
+  animation: pulse 1s ease-in-out infinite;
+}
 .subject-banner {
   align-self: center;
   display: flex;

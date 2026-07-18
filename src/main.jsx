@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.15'
+export const APP_VERSION = '2026.07.17.16'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -59,6 +59,10 @@ const EMOJIS = [
 ]
 
 const DELETE = '__DELETE__'
+
+// Write-phase countdown (seconds). Players who haven't submitted when it
+// expires get skipped. Host can toggle it any time.
+const WRITE_SECONDS = 135
 
 // ------------------------------------------------------------
 // PWA: install prompt + update detection + hard refresh
@@ -859,6 +863,7 @@ function CreateScreen({ profile, setProfile, onBack, onCreated }) {
         hostId: id,
         deck,
         cycles,
+        timerOn: true,
         phase: 'lobby',
         players: { [id]: playerFromProfile(profile) },
         order: [],
@@ -988,7 +993,7 @@ function LobbyScreen({ room, me, isHost, act, onLeave }) {
       questions: pool.slice(0, totalQ),
       qIndex: 0,
       totalQ,
-      current: { answers: {}, votes: {}, revealOrder: [], reactions: {} },
+      current: { answers: {}, votes: {}, revealOrder: [], reactions: {}, writeStarted: Date.now() },
     }
     for (const p of players) patch['players.' + p.id + '.score'] = 0
     act(patch)
@@ -1017,6 +1022,9 @@ function LobbyScreen({ room, me, isHost, act, onLeave }) {
           <button className="btn btn-primary btn-big" disabled={!canStart} onClick={start}>
             {canStart ? `Start with ${players.length} players 🎬` : 'Need at least 3 players…'}
           </button>
+          <button className="btn-link" onClick={() => act({ timerOn: !room.timerOn })}>
+            ⏱ Answer timer: {room.timerOn ? 'ON (2:15)' : 'OFF'}
+          </button>
           <button className="btn-link" onClick={() => act({ phase: 'ended' })}>
             End party
           </button>
@@ -1041,6 +1049,28 @@ function WriteScreen({ room, me, isHost, act }) {
   const [text, setText] = useState('')
   const doneIds = Object.keys(answers)
 
+  // Shared countdown: everyone computes from the same start timestamp.
+  const timerOn = !!room.timerOn
+  const started = room.current?.writeStarted || 0
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (!timerOn || !started) return
+    const iv = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(iv)
+  }, [timerOn, started])
+  const remaining = timerOn && started ? Math.max(0, WRITE_SECONDS * 1000 - (now - started)) : null
+
+  // Host device enforces the deadline: advance with whoever submitted.
+  const expiredFired = useRef(false)
+  useEffect(() => {
+    if (!isHost || remaining === null || remaining > 0 || expiredFired.current) return
+    expiredFired.current = true
+    act({ __host_force: doneIds.length >= 1 ? 'vote' : 'reveal' })
+  }, [isHost, remaining, doneIds.length, act])
+
+  const secs = remaining === null ? 0 : Math.ceil(remaining / 1000)
+  const clock = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0')
+
   const submit = () => {
     const t = text.trim()
     if (!t) return
@@ -1050,6 +1080,9 @@ function WriteScreen({ room, me, isHost, act }) {
   return (
     <div className="screen screen-play">
       <RoundHeader room={room} />
+      {remaining !== null && (
+        <div className={'timer-pill' + (remaining <= 15000 ? ' timer-low' : '')}>⏱ {clock}</div>
+      )}
       <div className="subject-banner">
         <span className="subject-emoji">{subj?.emoji}</span>
         This one's about <b>{isSubject ? 'YOU' : subj?.first || subj?.name}</b>
@@ -1082,6 +1115,20 @@ function WriteScreen({ room, me, isHost, act }) {
       {isHost && doneIds.length >= 2 && doneIds.length < playerList(room).length && (
         <button className="btn-link" onClick={() => act({ __host_force: 'vote' })}>
           Host: skip the stragglers →
+        </button>
+      )}
+      {isHost && (
+        <button
+          className="btn-link"
+          onClick={() =>
+            act(
+              timerOn
+                ? { timerOn: false }
+                : { timerOn: true, 'current.writeStarted': Date.now() }
+            )
+          }
+        >
+          ⏱ {timerOn ? 'Disable answer timer' : 'Enable answer timer'}
         </button>
       )}
     </div>
@@ -1213,7 +1260,7 @@ function RevealScreen({ room, me, isHost, act }) {
       act({
         phase: 'write',
         qIndex: room.qIndex + 1,
-        current: { answers: {}, votes: {}, revealOrder: [], reactions: {} },
+        current: { answers: {}, votes: {}, revealOrder: [], reactions: {}, writeStarted: Date.now() },
       })
     }
   }
