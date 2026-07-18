@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.16'
+export const APP_VERSION = '2026.07.17.17'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -1041,6 +1041,38 @@ function LobbyScreen({ room, me, isHost, act, onLeave }) {
   )
 }
 
+// Host-only: restart (back to lobby, scores reset) or end the party,
+// available on every in-game screen. Both confirm first.
+function HostControls({ room, act }) {
+  const restart = () => {
+    if (!confirm('Restart the game? Everyone goes back to the lobby and scores reset.')) return
+    const patch = {
+      phase: 'lobby',
+      qIndex: 0,
+      totalQ: 0,
+      order: [],
+      questions: [],
+      current: { answers: {}, votes: {}, revealOrder: [], reactions: {} },
+    }
+    for (const id of Object.keys(room.players || {})) patch['players.' + id + '.score'] = 0
+    act(patch)
+  }
+  const end = () => {
+    if (!confirm('End the party for everyone?')) return
+    act({ phase: 'ended' })
+  }
+  return (
+    <div className="host-controls">
+      <button className="btn-link" onClick={restart}>
+        🔁 Restart game
+      </button>
+      <button className="btn-link" onClick={end}>
+        🛑 End party
+      </button>
+    </div>
+  )
+}
+
 function WriteScreen({ room, me, isHost, act }) {
   const subj = subjectOf(room)
   const isSubject = subj?.id === me.id
@@ -1131,6 +1163,7 @@ function WriteScreen({ room, me, isHost, act }) {
           ⏱ {timerOn ? 'Disable answer timer' : 'Enable answer timer'}
         </button>
       )}
+      {isHost && <HostControls room={room} act={act} />}
     </div>
   )
 }
@@ -1181,6 +1214,7 @@ function VoteScreen({ room, me, isHost, act }) {
           Host: close the polls →
         </button>
       )}
+      {isHost && <HostControls room={room} act={act} />}
     </div>
   )
 }
@@ -1295,9 +1329,12 @@ function RevealScreen({ room, me, isHost, act }) {
       <div className="board-title">Scoreboard</div>
       <Leaderboard room={room} highlight={me.id} />
       {isHost ? (
-        <button className="btn btn-primary btn-big" onClick={next}>
-          {isLast ? 'Final Results 🏆' : 'Next Question →'}
-        </button>
+        <>
+          <button className="btn btn-primary btn-big" onClick={next}>
+            {isLast ? 'Final Results 🏆' : 'Next Question →'}
+          </button>
+          <HostControls room={room} act={act} />
+        </>
       ) : (
         <div className="waiting-pulse">Host controls the next round…</div>
       )}
@@ -1353,9 +1390,19 @@ function FinalScreen({ room, me, isHost, act, onLeave }) {
       </div>
       <Leaderboard room={room} highlight={me.id} />
       {isHost ? (
-        <button className="btn btn-primary btn-big" onClick={playAgain}>
-          Play Again 🔁
-        </button>
+        <>
+          <button className="btn btn-primary btn-big" onClick={playAgain}>
+            Play Again 🔁
+          </button>
+          <button
+            className="btn-link"
+            onClick={() => {
+              if (confirm('End the party for everyone?')) act({ phase: 'ended' })
+            }}
+          >
+            🛑 End party
+          </button>
+        </>
       ) : (
         <div className="waiting-pulse">Waiting for the host…</div>
       )}

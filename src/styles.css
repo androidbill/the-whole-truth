@@ -592,6 +592,13 @@ body {
   animation: pulse 1.6s ease-in-out infinite;
 }
 
+.host-controls {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 4px;
+}
+
 /* ---------- Voting ---------- */
 .vote-hint {
   color: var(--ink-dim);
