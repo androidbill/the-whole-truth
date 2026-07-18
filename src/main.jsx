@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.17.17'
+export const APP_VERSION = '2026.07.17.18'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -1079,6 +1079,7 @@ function WriteScreen({ room, me, isHost, act }) {
   const answers = room.current?.answers || {}
   const mine = answers[me.id]
   const [text, setText] = useState('')
+  const [editing, setEditing] = useState(false)
   const doneIds = Object.keys(answers)
 
   // Shared countdown: everyone computes from the same start timestamp.
@@ -1107,6 +1108,7 @@ function WriteScreen({ room, me, isHost, act }) {
     const t = text.trim()
     if (!t) return
     act({ ['current.answers.' + me.id]: t })
+    setEditing(false)
   }
 
   return (
@@ -1120,7 +1122,7 @@ function WriteScreen({ room, me, isHost, act }) {
         This one's about <b>{isSubject ? 'YOU' : subj?.first || subj?.name}</b>
       </div>
       <h2 className="question">{questionText(room)}</h2>
-      {!mine ? (
+      {!mine || editing ? (
         <>
           <textarea
             className="answer-input"
@@ -1132,15 +1134,21 @@ function WriteScreen({ room, me, isHost, act }) {
           />
           <div className="char-count">{text.length}/120</div>
           <button className="btn btn-primary btn-big" disabled={!text.trim()} onClick={submit}>
-            Lock It In 🔒
+            {mine ? 'Update Now ✏️' : 'Lock It In 🔒'}
           </button>
         </>
       ) : (
         <>
-          <div className="my-answer">
-            <div className="my-answer-label">Your answer</div>
+          <button
+            className="my-answer my-answer-tap"
+            onClick={() => {
+              setText(mine)
+              setEditing(true)
+            }}
+          >
+            <div className="my-answer-label">Your answer · ✏️ tap to edit</div>
             “{mine}”
-          </div>
+          </button>
           <WaitBoard room={room} doneIds={doneIds} label="Waiting on the slow typers…" />
         </>
       )}
