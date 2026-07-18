@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.18.01'
+export const APP_VERSION = '2026.07.18.02'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -129,6 +129,10 @@ function sfx(name) {
   } else if (name === 'fanfare') {
     ;[523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, 'triangle', 0.07, i * 0.12))
     vibrate([60, 40, 60, 40, 140])
+  } else if (name === 'boom') {
+    tone(140, 0.35, 'sine', 0.14)
+    tone(70, 0.5, 'sine', 0.14, 0.06)
+    vibrate([90])
   }
 }
 
@@ -415,7 +419,8 @@ function getStore() {
 const DECKS = [
   { id: 'party', emoji: '🎉', name: 'Party', blurb: 'Silly, safe-ish, everyone plays' },
   { id: 'spicy', emoji: '🌶️', name: 'Spicy', blurb: '18+ · cheeky & embarrassing' },
-  { id: 'mixed', emoji: '🎭', name: 'Mixed', blurb: 'A shot of both, shaken' },
+  { id: 'mixed', emoji: '🎭', name: 'Mixed', blurb: 'Party + Spicy, shaken' },
+  { id: 'clean', emoji: '🧼', name: 'Clean', blurb: 'Family-safe · all ages' },
 ]
 
 // Party themes: the host picks one at creation and every player's app
@@ -575,6 +580,96 @@ function saveGameToHistory(room) {
     })
     localStorage.setItem(LS_HISTORY, JSON.stringify(list.slice(0, 50)))
   } catch {}
+}
+
+// ------------------------------------------------------------
+// Shareable results card (canvas → native share sheet / download)
+// ------------------------------------------------------------
+function wrapText(ctx, text, x, y, maxW, lineH) {
+  const words = String(text).split(' ')
+  let line = ''
+  for (const w of words) {
+    const tryLine = line ? line + ' ' + w : w
+    if (ctx.measureText(tryLine).width > maxW && line) {
+      ctx.fillText(line, x, y)
+      y += lineH
+      line = w
+    } else {
+      line = tryLine
+    }
+  }
+  if (line) ctx.fillText(line, x, y)
+  return y + lineH
+}
+
+async function shareResults(room) {
+  try {
+    const rows = ranked(room)
+    const W = 1080
+    const H = 1350
+    const canvas = document.createElement('canvas')
+    canvas.width = W
+    canvas.height = H
+    const ctx = canvas.getContext('2d')
+    const css = getComputedStyle(document.documentElement)
+    const bg = css.getPropertyValue('--bg-0').trim() || '#150a26'
+    const hot = css.getPropertyValue('--hot').trim() || '#f472b6'
+    ctx.fillStyle = bg
+    ctx.fillRect(0, 0, W, H)
+    const glow = ctx.createRadialGradient(W * 0.8, 0, 50, W * 0.8, 0, 900)
+    glow.addColorStop(0, 'rgba(255,255,255,0.10)')
+    glow.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = glow
+    ctx.fillRect(0, 0, W, H)
+    ctx.textAlign = 'center'
+    ctx.fillStyle = 'rgba(245,239,255,0.6)'
+    ctx.font = '300 44px system-ui, sans-serif'
+    ctx.fillText('T H E', W / 2, 130)
+    ctx.fillStyle = hot
+    ctx.font = '900 128px system-ui, sans-serif'
+    ctx.fillText('WHOLE', W / 2, 250)
+    ctx.fillStyle = '#f5efff'
+    ctx.fillText('TRUTH', W / 2, 375)
+    const win = rows[0]
+    ctx.font = '110px system-ui, sans-serif'
+    ctx.fillText(win?.emoji || '👑', W / 2, 530)
+    ctx.fillStyle = '#facc15'
+    ctx.font = '900 66px system-ui, sans-serif'
+    ctx.fillText('👑 ' + (win?.name || '?') + ' wins!', W / 2, 630)
+    let y = 740
+    ctx.font = '600 46px system-ui, sans-serif'
+    rows.slice(0, 5).forEach((p, i) => {
+      ctx.fillStyle = i === 0 ? '#facc15' : 'rgba(245,239,255,0.85)'
+      ctx.fillText(`${i + 1}.  ${p.emoji} ${p.name} — ${p.score || 0}`, W / 2, y)
+      y += 66
+    })
+    if (room.bestLie) {
+      y += 50
+      ctx.fillStyle = hot
+      ctx.font = '700 42px system-ui, sans-serif'
+      ctx.fillText('🏆 Lie of the game', W / 2, y)
+      y += 60
+      ctx.fillStyle = 'rgba(245,239,255,0.9)'
+      ctx.font = 'italic 44px system-ui, sans-serif'
+      y = wrapText(ctx, '“' + room.bestLie.text + '” — ' + room.bestLie.by, W / 2, y, 900, 58)
+    }
+    ctx.fillStyle = 'rgba(245,239,255,0.5)'
+    ctx.font = '500 36px system-ui, sans-serif'
+    ctx.fillText(appUrl().replace(/^https?:\/\//, ''), W / 2, H - 56)
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
+    if (!blob) return
+    const file = new File([blob], 'the-whole-truth-results.png', { type: 'image/png' })
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'The Whole Truth' })
+    } else {
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = file.name
+      a.click()
+    }
+  } catch {
+    // user closed the share sheet — not an error
+  }
 }
 
 // ------------------------------------------------------------
@@ -1219,24 +1314,72 @@ function JoinScreen({ profile, setProfile, onBack, onJoined, prefillCode }) {
   )
 }
 
+function CustomQModal({ room, act, onClose }) {
+  const [text, setText] = useState((room.customQ || []).join('\n'))
+  const save = () => {
+    const lines = text
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 5)
+    act({ customQ: lines })
+    onClose()
+    notify(
+      lines.length
+        ? `${lines.length} custom question${lines.length > 1 ? 's' : ''} in the mix! ✍️`
+        : 'Custom questions cleared'
+    )
+  }
+  return (
+    <div className="about-overlay" onClick={onClose}>
+      <div className="about-card customq-card" onClick={(e) => e.stopPropagation()}>
+        <div className="about-name">✍️ Your own questions</div>
+        <div className="customq-hint">
+          One per line, up to 5. They get shuffled into the deck. Write {'{P}'} where the player's
+          name should appear — e.g. "What {'{P}'} really did at Ryan's birthday"
+        </div>
+        <textarea
+          className="answer-input customq-input"
+          rows={6}
+          maxLength={600}
+          placeholder={'What {P} really did at the lake house\nThe app {P} would invent'}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <button className="btn btn-primary" onClick={save}>
+          Save
+        </button>
+        <button className="btn-link" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function LobbyScreen({ room, me, isHost, act, onLeave }) {
   const players = playerList(room)
   const canStart = players.length >= 3
   const deck = DECKS.find((d) => d.id === room.deck) || DECKS[2]
   const [joinQr, setJoinQr] = useState(false)
+  const [customQ, setCustomQ] = useState(false)
   const joinUrl = appUrl() + '?join=' + room.code
 
   const start = () => {
     const ids = shuffle(players.map((p) => p.id))
     const totalQ = ids.length * (room.cycles || 1)
+    // Host's custom questions join the deal, then everything is shuffled.
+    const custom = shuffle((room.customQ || []).filter(Boolean)).slice(0, totalQ)
+    const drawn = drawQuestions(room.deck, totalQ - custom.length)
     const patch = {
       phase: 'write',
       order: ids,
-      questions: drawQuestions(room.deck, totalQ),
+      questions: shuffle([...custom, ...drawn]),
       qIndex: 0,
       totalQ,
       bestLie: DELETE,
       bestReacted: DELETE,
+      stats: DELETE,
       current: { answers: {}, votes: {}, revealOrder: [], reactions: {}, writeStarted: Date.now() },
     }
     for (const p of players) patch['players.' + p.id + '.score'] = 0
@@ -1289,6 +1432,10 @@ function LobbyScreen({ room, me, isHost, act, onLeave }) {
           <button className="btn-link" onClick={() => act({ timerOn: !room.timerOn })}>
             ⏱ Answer timer: {room.timerOn ? 'ON (2:15)' : 'OFF'}
           </button>
+          <button className="btn-link" onClick={() => setCustomQ(true)}>
+            ✍️ Custom questions{room.customQ?.length ? ` (${room.customQ.length})` : ''}
+          </button>
+          {customQ && <CustomQModal room={room} act={act} onClose={() => setCustomQ(false)} />}
           <button className="btn-link" onClick={() => act({ phase: 'ended' })}>
             End party
           </button>
@@ -1318,6 +1465,7 @@ function HostControls({ room, act }) {
       questions: [],
       bestLie: DELETE,
       bestReacted: DELETE,
+      stats: DELETE,
       current: { answers: {}, votes: {}, revealOrder: [], reactions: {} },
     }
     for (const id of Object.keys(room.players || {})) patch['players.' + id + '.score'] = 0
@@ -1541,8 +1689,38 @@ function ReactionBar({ pid, reactions, open, onToggle, onReact }) {
   const mine = reactions?.[pid] || {}
   const grouped = {}
   for (const e of Object.values(mine)) grouped[e] = (grouped[e] || 0) + 1
+
+  // Floating emoji burst whenever a reaction lands (TikTok-live style).
+  const [bursts, setBursts] = useState([])
+  const prevGrouped = useRef({})
+  useEffect(() => {
+    const added = []
+    for (const [e, n] of Object.entries(grouped)) {
+      const before = prevGrouped.current[e] || 0
+      for (let i = before; i < n; i++) added.push(e)
+    }
+    prevGrouped.current = grouped
+    if (!added.length) return
+    const items = added.map((e) => ({
+      id: Math.random().toString(36).slice(2),
+      emoji: e,
+      x: 10 + Math.random() * 80,
+    }))
+    setBursts((b) => [...b.slice(-8), ...items])
+    const t = setTimeout(
+      () => setBursts((b) => b.filter((x) => !items.some((i2) => i2.id === x.id))),
+      1400
+    )
+    return () => clearTimeout(t)
+  }, [JSON.stringify(grouped)])
+
   return (
     <div className="reaction-wrap">
+      {bursts.map((b) => (
+        <span key={b.id} className="burst" style={{ left: b.x + '%' }}>
+          {b.emoji}
+        </span>
+      ))}
       <div className="reaction-row">
         {Object.entries(grouped).map(([e, n]) => (
           <span key={e} className="reaction-chip">
@@ -1592,10 +1770,29 @@ function RevealScreen({ room, me, isHost, act }) {
   const isLast = room.qIndex + 1 >= room.totalQ
   const truthMode = room.mode === 'truth'
 
+  // Dramatic reveal: cards flip lowest-votes-first as the host taps.
+  // Legacy rooms without the counter show everything.
+  const revealedRaw = room.current?.revealed
+  const revealed = revealedRaw === undefined ? rows.length : Math.min(revealedRaw, rows.length)
+  const allRevealed = revealed >= rows.length
+  const prevRevealed = useRef(revealed)
+  useEffect(() => {
+    if (revealed > prevRevealed.current) {
+      if (revealed >= rows.length && rows.length > 0) sfx('boom')
+      else sfx('reveal')
+    }
+    prevRevealed.current = revealed
+  }, [revealed, rows.length])
+
   const next = () => {
     // Hall of fame: carry forward the game's best-voted answer and the
     // answer that collected the most reactions.
     const patch = {}
+    // Superlatives: reactions received count toward Chaos Agent.
+    for (const [pid, byPlayer] of Object.entries(reactions)) {
+      const n = Object.keys(byPlayer || {}).length
+      if (n > 0) patch['stats.' + pid + '.reactionsGot'] = (room.stats?.[pid]?.reactionsGot || 0) + n
+    }
     const top = rows[0]
     if (top && top.votes > (room.bestLie?.votes || 0)) {
       patch.bestLie = { text: top.text, by: players[top.pid]?.name || '?', votes: top.votes }
@@ -1637,51 +1834,120 @@ function RevealScreen({ room, me, isHost, act }) {
       <RoundHeader room={room} />
       <h2 className="question question-small">{questionText(room)}</h2>
       <div className="reveal-list">
-        {rows.map((r, i) => (
-          <div key={r.pid} className={'reveal-card' + (i === 0 && r.votes > 0 ? ' reveal-top' : '')} style={{ animationDelay: `${i * 0.35}s` }}>
-            <div className="reveal-text">“{r.text}”</div>
-            <div className="reveal-meta">
-              <span className="reveal-author">
-                {players[r.pid]?.emoji} {players[r.pid]?.name}
-                {r.pid === subj?.id && (
-                  <span className="reveal-subject-tag">
-                    {truthMode ? 'THE TRUTH ✅' : 'the subject!'}
-                  </span>
-                )}
-              </span>
-              <span className="reveal-votes">
-                {r.voters.join(' ')} {r.votes > 0 ? `+${r.votes * 100}` : '·'}
-              </span>
+        {rows.map((r, i) => {
+          // Cards flip from the bottom of the list (fewest votes) upward.
+          const isVisible = i >= rows.length - revealed
+          if (!isVisible)
+            return (
+              <div key={r.pid} className="reveal-card reveal-facedown">
+                <div className="reveal-text">🤫 · · ·</div>
+              </div>
+            )
+          return (
+            <div key={r.pid} className={'reveal-card' + (i === 0 && r.votes > 0 ? ' reveal-top' : '')}>
+              <div className="reveal-text">“{r.text}”</div>
+              <div className="reveal-meta">
+                <span className="reveal-author">
+                  {players[r.pid]?.emoji} {players[r.pid]?.name}
+                  {r.pid === subj?.id && (
+                    <span className="reveal-subject-tag">
+                      {truthMode ? 'THE TRUTH ✅' : 'the subject!'}
+                    </span>
+                  )}
+                </span>
+                <span className="reveal-votes">
+                  {r.voters.join(' ')} {r.votes > 0 ? `+${r.votes * 100}` : '·'}
+                </span>
+              </div>
+              <ReactionBar
+                pid={r.pid}
+                reactions={reactions}
+                open={pickerFor === r.pid}
+                onToggle={() => setPickerFor(pickerFor === r.pid ? null : r.pid)}
+                onReact={(e) => react(r.pid, e)}
+              />
             </div>
-            <ReactionBar
-              pid={r.pid}
-              reactions={reactions}
-              open={pickerFor === r.pid}
-              onToggle={() => setPickerFor(pickerFor === r.pid ? null : r.pid)}
-              onReact={(e) => react(r.pid, e)}
-            />
-          </div>
-        ))}
+          )
+        })}
       </div>
-      <div className="board-title">Scoreboard</div>
-      <Leaderboard room={room} highlight={me.id} />
+      {allRevealed && (
+        <>
+          <div className="board-title">Scoreboard</div>
+          <Leaderboard room={room} highlight={me.id} />
+        </>
+      )}
       {isHost ? (
         <>
-          <button className="btn btn-primary btn-big" onClick={next}>
-            {isLast ? 'Final Results 🏆' : 'Next Question →'}
-          </button>
+          {!allRevealed ? (
+            <>
+              <button
+                className="btn btn-primary btn-big"
+                onClick={() => act({ 'current.revealed': revealed + 1 })}
+              >
+                🥁 Reveal next answer
+              </button>
+              <button className="btn-link" onClick={() => act({ 'current.revealed': rows.length })}>
+                Show them all
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-primary btn-big" onClick={next}>
+              {isLast ? 'Final Results 🏆' : 'Next Question →'}
+            </button>
+          )}
           <HostControls room={room} act={act} />
         </>
       ) : (
-        <div className="waiting-pulse">Host controls the next round…</div>
+        <div className="waiting-pulse">
+          {allRevealed ? 'Host controls the next round…' : 'The host is revealing answers… 🥁'}
+        </div>
       )}
     </div>
   )
 }
 
+function computeAwards(room) {
+  const stats = room.stats || {}
+  const topBy = (key) => {
+    let best = null
+    let bn = 0
+    for (const [pid, s] of Object.entries(stats)) {
+      const n = s?.[key] || 0
+      if (n > bn) {
+        bn = n
+        best = pid
+      }
+    }
+    return best ? { pid: best, n: bn } : null
+  }
+  const name = (pid) => {
+    const p = room.players?.[pid]
+    return p ? p.emoji + ' ' + p.name : '?'
+  }
+  const truth = room.mode === 'truth'
+  const defs = [
+    ['votesWon', '🎭 Smoothest Liar', (n) => `${n} vote${n === 1 ? '' : 's'} won`],
+    ['reactionsGot', '🧲 Chaos Agent', (n) => `${n} reaction${n === 1 ? '' : 's'} collected`],
+    ...(truth
+      ? [
+          ['sharp', '🕵️ Human Lie Detector', (n) => `found the truth ${n}×`],
+          ['fooled', '🤡 Most Gullible', (n) => `fooled ${n} time${n === 1 ? '' : 's'}`],
+        ]
+      : []),
+    ['skipped', '👻 The Ghost', (n) => `missed ${n} round${n === 1 ? '' : 's'}`],
+  ]
+  return defs
+    .map(([key, title, label]) => {
+      const t = topBy(key)
+      return t ? { title, who: name(t.pid), label: label(t.n) } : null
+    })
+    .filter(Boolean)
+}
+
 function FinalScreen({ room, me, isHost, act, onLeave }) {
   const rows = ranked(room)
   const podium = rows.slice(0, 3)
+  const awards = computeAwards(room)
   const playAgain = () => {
     const patch = {
       phase: 'lobby',
@@ -1691,6 +1957,7 @@ function FinalScreen({ room, me, isHost, act, onLeave }) {
       questions: [],
       bestLie: DELETE,
       bestReacted: DELETE,
+      stats: DELETE,
       current: { answers: {}, votes: {}, revealOrder: [], reactions: {} },
     }
     for (const p of rows) patch['players.' + p.id + '.score'] = 0
@@ -1727,7 +1994,21 @@ function FinalScreen({ room, me, isHost, act, onLeave }) {
       <div className="final-winner">
         {podium[0]?.name} is the best liar you know. Congratulations?
       </div>
+      {awards.length > 0 && (
+        <div className="awards">
+          {awards.map((a, i) => (
+            <div key={i} className="award-row" style={{ animationDelay: `${0.6 + i * 0.25}s` }}>
+              <span className="award-title">{a.title}</span>
+              <span className="award-who">{a.who}</span>
+              <span className="award-label">{a.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <Leaderboard room={room} highlight={me.id} />
+      <button className="btn btn-ghost" onClick={() => shareResults(room)}>
+        📸 Share results
+      </button>
       {isHost ? (
         <>
           <button className="btn btn-primary btn-big" onClick={playAgain}>
@@ -2019,17 +2300,38 @@ function App() {
 // voter their lie fooled.
 function buildScorePatch(room) {
   const votes = room?.current?.votes || {}
+  const answers = room?.current?.answers || {}
   const truth = room?.mode === 'truth'
   const subjId = room?.order?.length ? room.order[room.qIndex % room.order.length] : null
   const gains = {}
-  for (const [voter, target] of Object.entries(votes)) {
-    if (truth && target === subjId) gains[voter] = (gains[voter] || 0) + 1
-    else gains[target] = (gains[target] || 0) + 1
+  // Per-player running stats feed the end-of-game superlatives.
+  const bump = {}
+  const stat = (pid, key) => {
+    bump[pid] = bump[pid] || {}
+    bump[pid][key] = (bump[pid][key] || 0) + 1
   }
-  const patch = { phase: 'reveal' }
+  for (const [voter, target] of Object.entries(votes)) {
+    if (truth && target === subjId) {
+      gains[voter] = (gains[voter] || 0) + 1
+      stat(voter, 'sharp')
+    } else {
+      gains[target] = (gains[target] || 0) + 1
+      stat(target, 'votesWon')
+      if (truth) stat(voter, 'fooled')
+    }
+  }
+  for (const pid of Object.keys(room?.players || {})) {
+    if (!answers[pid]) stat(pid, 'skipped')
+  }
+  const patch = { phase: 'reveal', 'current.revealed': 0 }
   for (const [pid, n] of Object.entries(gains)) {
     const cur = room.players[pid]?.score || 0
     patch['players.' + pid + '.score'] = cur + n * 100
+  }
+  for (const [pid, keys] of Object.entries(bump)) {
+    for (const [key, n] of Object.entries(keys)) {
+      patch['stats.' + pid + '.' + key] = (room.stats?.[pid]?.[key] || 0) + n
+    }
   }
   return patch
 }
