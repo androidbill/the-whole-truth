@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.18.05'
+export const APP_VERSION = '2026.07.18.06'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -1405,8 +1405,12 @@ function LobbyScreen({ room, me, isHost, act, onLeave }) {
           {ONLINE_MODE ? 'Friends join on their phones with this code' : 'Open another tab and join with this code'}
         </div>
         {ONLINE_MODE && (
-          <button className="btn-link" onClick={() => setJoinQr(true)}>
-            📱 Show QR to join
+          <button
+            className="kebab lobby-qr"
+            aria-label="Show QR code to join"
+            onClick={() => setJoinQr(true)}
+          >
+            <QrIcon />
           </button>
         )}
       </div>

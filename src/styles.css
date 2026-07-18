@@ -543,6 +543,11 @@ body {
   font-size: 13px;
   color: var(--ink-dim);
 }
+.lobby-qr {
+  margin: 10px auto 0;
+  display: grid;
+  place-items: center;
+}
 .lobby-deck {
   font-size: 14px;
   color: var(--ink-dim);
