@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.18.02'
+export const APP_VERSION = '2026.07.18.03'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -1315,18 +1315,19 @@ function JoinScreen({ profile, setProfile, onBack, onJoined, prefillCode }) {
 }
 
 function CustomQModal({ room, act, onClose }) {
-  const [text, setText] = useState((room.customQ || []).join('\n'))
+  const [items, setItems] = useState(() => {
+    const existing = room.customQ || []
+    return existing.length ? existing : ['']
+  })
+  const setItem = (i, v) => setItems(items.map((q, j) => (j === i ? v : q)))
+  const removeItem = (i) => setItems(items.filter((_, j) => j !== i).concat(items.length === 1 ? [''] : []))
   const save = () => {
-    const lines = text
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .slice(0, 5)
-    act({ customQ: lines })
+    const list = items.map((s) => s.trim()).filter(Boolean).slice(0, 5)
+    act({ customQ: list })
     onClose()
     notify(
-      lines.length
-        ? `${lines.length} custom question${lines.length > 1 ? 's' : ''} in the mix! ✍️`
+      list.length
+        ? `${list.length} custom question${list.length > 1 ? 's' : ''} in the mix! ✍️`
         : 'Custom questions cleared'
     )
   }
@@ -1335,17 +1336,28 @@ function CustomQModal({ room, act, onClose }) {
       <div className="about-card customq-card" onClick={(e) => e.stopPropagation()}>
         <div className="about-name">✍️ Your own questions</div>
         <div className="customq-hint">
-          One per line, up to 5. They get shuffled into the deck. Write {'{P}'} where the player's
-          name should appear — e.g. "What {'{P}'} really did at Ryan's birthday"
+          Up to 5, shuffled into the deck. Write {'{P}'} where the player's name should appear —
+          e.g. "What {'{P}'} really did at Ryan's birthday"
         </div>
-        <textarea
-          className="answer-input customq-input"
-          rows={6}
-          maxLength={600}
-          placeholder={'What {P} really did at the lake house\nThe app {P} would invent'}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
+        {items.map((q, i) => (
+          <div key={i} className="customq-row">
+            <input
+              className="input customq-field"
+              maxLength={120}
+              placeholder={i === 0 ? 'What {P} really did at the lake house' : 'Another question…'}
+              value={q}
+              onChange={(e) => setItem(i, e.target.value)}
+            />
+            <button className="customq-remove" aria-label="Remove question" onClick={() => removeItem(i)}>
+              ✕
+            </button>
+          </div>
+        ))}
+        {items.length < 5 && (
+          <button className="btn-link" onClick={() => setItems([...items, ''])}>
+            ＋ Add another
+          </button>
+        )}
         <button className="btn btn-primary" onClick={save}>
           Save
         </button>
