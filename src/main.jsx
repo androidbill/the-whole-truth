@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { buildDeck } from './questions.js'
 import './styles.css'
 
-export const APP_VERSION = '2026.07.18.07'
+export const APP_VERSION = '2026.07.18.08'
 export const APP_AUTHOR = 'Bill Parsons'
 
 // ------------------------------------------------------------
@@ -1783,20 +1783,6 @@ function RevealScreen({ room, me, isHost, act }) {
   const isLast = room.qIndex + 1 >= room.totalQ
   const truthMode = room.mode === 'truth'
 
-  // Dramatic reveal: cards flip lowest-votes-first as the host taps.
-  // Legacy rooms without the counter show everything.
-  const revealedRaw = room.current?.revealed
-  const revealed = revealedRaw === undefined ? rows.length : Math.min(revealedRaw, rows.length)
-  const allRevealed = revealed >= rows.length
-  const prevRevealed = useRef(revealed)
-  useEffect(() => {
-    if (revealed > prevRevealed.current) {
-      if (revealed >= rows.length && rows.length > 0) sfx('boom')
-      else sfx('reveal')
-    }
-    prevRevealed.current = revealed
-  }, [revealed, rows.length])
-
   const next = () => {
     // Hall of fame: carry forward the game's best-voted answer and the
     // answer that collected the most reactions.
@@ -1847,73 +1833,47 @@ function RevealScreen({ room, me, isHost, act }) {
       <RoundHeader room={room} />
       <h2 className="question question-small">{questionText(room)}</h2>
       <div className="reveal-list">
-        {rows.map((r, i) => {
-          // Cards flip from the bottom of the list (fewest votes) upward.
-          const isVisible = i >= rows.length - revealed
-          if (!isVisible)
-            return (
-              <div key={r.pid} className="reveal-card reveal-facedown">
-                <div className="reveal-text">🤫 · · ·</div>
-              </div>
-            )
-          return (
-            <div key={r.pid} className={'reveal-card' + (i === 0 && r.votes > 0 ? ' reveal-top' : '')}>
-              <div className="reveal-text">“{r.text}”</div>
-              <div className="reveal-meta">
-                <span className="reveal-author">
-                  {players[r.pid]?.emoji} {players[r.pid]?.name}
-                  {r.pid === subj?.id && (
-                    <span className="reveal-subject-tag">
-                      {truthMode ? 'THE TRUTH ✅' : 'the subject!'}
-                    </span>
-                  )}
-                </span>
-                <span className="reveal-votes">
-                  {r.voters.join(' ')} {r.votes > 0 ? `+${r.votes * 100}` : '·'}
-                </span>
-              </div>
-              <ReactionBar
-                pid={r.pid}
-                reactions={reactions}
-                open={pickerFor === r.pid}
-                onToggle={() => setPickerFor(pickerFor === r.pid ? null : r.pid)}
-                onReact={(e) => react(r.pid, e)}
-              />
+        {rows.map((r, i) => (
+          <div
+            key={r.pid}
+            className={'reveal-card' + (i === 0 && r.votes > 0 ? ' reveal-top' : '')}
+            style={{ animationDelay: `${i * 0.35}s` }}
+          >
+            <div className="reveal-text">“{r.text}”</div>
+            <div className="reveal-meta">
+              <span className="reveal-author">
+                {players[r.pid]?.emoji} {players[r.pid]?.name}
+                {r.pid === subj?.id && (
+                  <span className="reveal-subject-tag">
+                    {truthMode ? 'THE TRUTH ✅' : 'the subject!'}
+                  </span>
+                )}
+              </span>
+              <span className="reveal-votes">
+                {r.voters.join(' ')} {r.votes > 0 ? `+${r.votes * 100}` : '·'}
+              </span>
             </div>
-          )
-        })}
+            <ReactionBar
+              pid={r.pid}
+              reactions={reactions}
+              open={pickerFor === r.pid}
+              onToggle={() => setPickerFor(pickerFor === r.pid ? null : r.pid)}
+              onReact={(e) => react(r.pid, e)}
+            />
+          </div>
+        ))}
       </div>
-      {allRevealed && (
-        <>
-          <div className="board-title">Scoreboard</div>
-          <Leaderboard room={room} highlight={me.id} />
-        </>
-      )}
+      <div className="board-title">Scoreboard</div>
+      <Leaderboard room={room} highlight={me.id} />
       {isHost ? (
         <>
-          {!allRevealed ? (
-            <>
-              <button
-                className="btn btn-primary btn-big"
-                onClick={() => act({ 'current.revealed': revealed + 1 })}
-              >
-                🥁 Reveal next answer
-              </button>
-              <button className="btn-link" onClick={() => act({ 'current.revealed': rows.length })}>
-                Show them all
-              </button>
-            </>
-          ) : (
-            <button className="btn btn-primary btn-big" onClick={next}>
-              {isLast ? 'Final Results 🏆' : 'Next Question →'}
-            </button>
-          )}
+          <button className="btn btn-primary btn-big" onClick={next}>
+            {isLast ? 'Final Results 🏆' : 'Next Question →'}
+          </button>
           <HostControls room={room} act={act} />
         </>
       ) : (
-        <div className="waiting-pulse">
-          {allRevealed ? 'Host controls the next round…' : 'The host is revealing answers… 🥁'}
-        </div>
+        <div className="waiting-pulse">Host controls the next round…</div>
       )}
     </div>
   )
@@ -2336,7 +2296,7 @@ function buildScorePatch(room) {
   for (const pid of Object.keys(room?.players || {})) {
     if (!answers[pid]) stat(pid, 'skipped')
   }
-  const patch = { phase: 'reveal', 'current.revealed': 0 }
+  const patch = { phase: 'reveal' }
   for (const [pid, n] of Object.entries(gains)) {
     const cur = room.players[pid]?.score || 0
     patch['players.' + pid + '.score'] = cur + n * 100

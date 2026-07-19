@@ -866,12 +866,6 @@ body {
     transform: none;
   }
 }
-.reveal-facedown {
-  opacity: 0.55;
-  border-style: dashed;
-  text-align: center;
-  letter-spacing: 4px;
-}
 .reveal-top {
   border-color: var(--gold);
   background: rgba(250, 204, 21, 0.08);
